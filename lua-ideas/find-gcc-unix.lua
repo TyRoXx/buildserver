@@ -8,9 +8,9 @@ return ci:implement_package(
 		local gcc = find_executable:find({
 			filename = "gcc"
 		})
-		local gxx = find_executable:find({
+		local gxx = find_executable:find_at({
 			filename = "g++",
-			root = ci:parent_path(gcc)
+			at = ci:parent_path(gcc)
 		})
 		return {
 			gcc = gcc,

@@ -50,6 +50,39 @@ namespace buildserver
 		additional_directories.emplace_back("/usr/local/bin");
 		return find_file_in_directories(filename, additional_directories);
 	}
+
+	struct gcc_location
+	{
+		boost::filesystem::path gcc, gxx;
+	};
+
+	Si::error_or<boost::optional<gcc_location>> find_gcc_unix()
+	{
+		auto gcc = find_executable_unix("gcc", {});
+		if (gcc.is_error())
+		{
+			return gcc.error();
+		}
+		if (!gcc.get())
+		{
+			return boost::none;
+		}
+		auto gxx = find_file_in_directories("g++", {gcc.get()->parent_path()});
+		return Si::map(std::move(gxx), [&gcc](boost::optional<boost::filesystem::path> gxx_path) -> boost::optional<gcc_location>
+		{
+			if (gxx_path)
+			{
+				gcc_location result;
+				result.gcc = std::move(*gcc.get());
+				result.gxx = std::move(*gxx_path);
+				return result;
+			}
+			else
+			{
+				return boost::none;
+			}
+		});
+	}
 }
 BOOST_AUTO_TEST_CASE(find_executable_unix_test)
 {
@@ -58,5 +91,10 @@ BOOST_AUTO_TEST_CASE(find_executable_unix_test)
 #ifndef _WIN32
 	BOOST_CHECK_EQUAL(boost::filesystem::path("/bin/sh"), buildserver::find_executable_unix("sh", {}));
 	BOOST_CHECK_EQUAL(boost::none, buildserver::find_file_in_directories("sh", {}));
+
+	auto gnuc = buildserver::find_gcc_unix();
+	BOOST_REQUIRE(gnuc.get());
+	BOOST_CHECK_EQUAL("/usr/bin/gcc", gnuc.get()->gcc);
+	BOOST_CHECK_EQUAL("/usr/bin/g++", gnuc.get()->gxx);
 #endif
 }
