@@ -1,5 +1,6 @@
 #define BOOST_TEST_MAIN
 #include <boost/test/unit_test.hpp>
+#include "server/cmake.hpp"
 #include <silicium/error_or.hpp>
 #include <silicium/override.hpp>
 #include <silicium/process.hpp>
@@ -93,81 +94,6 @@ namespace buildserver
 	{
 		return find_executable_unix("cmake", {});
 	}
-
-	struct cmake
-	{
-		virtual ~cmake()
-		{
-		}
-		virtual boost::system::error_code generate(
-			boost::filesystem::path const &source,
-			boost::filesystem::path const &build,
-			boost::unordered_map<std::string, std::string> const &definitions
-		) const = 0;
-		virtual boost::system::error_code build(
-			boost::filesystem::path const &build,
-			unsigned cpu_parallelism
-		) const = 0;
-	};
-
-	struct cmake_exe : cmake
-	{
-		explicit cmake_exe(
-			boost::filesystem::path exe)
-			: m_exe(std::move(exe))
-		{
-		}
-
-		virtual boost::system::error_code generate(
-			boost::filesystem::path const &source,
-			boost::filesystem::path const &build,
-			boost::unordered_map<std::string, std::string> const &definitions
-		) const SILICIUM_OVERRIDE
-		{
-			std::vector<std::string> arguments;
-			arguments.emplace_back(source.string());
-			for (auto const &definition : definitions)
-			{
-				//TODO: is this properly encoded in all cases? I guess not
-				auto encoded = "-D" + definition.first + "=" + definition.second;
-				arguments.emplace_back(std::move(encoded));
-			}
-			Si::process_parameters parameters;
-			parameters.executable = m_exe;
-			parameters.current_path = build;
-			parameters.arguments = std::move(arguments);
-			int const rc = Si::run_process(parameters);
-			if (rc != 0)
-			{
-				throw std::runtime_error("Unexpected CMake return code");
-			}
-			return {};
-		}
-
-		virtual boost::system::error_code build(
-			boost::filesystem::path const &build,
-			unsigned cpu_parallelism
-		) const SILICIUM_OVERRIDE
-		{
-			//assuming make..
-			std::vector<std::string> arguments{"--build", ".", "--", "-j"};
-			arguments.emplace_back(boost::lexical_cast<std::string>(cpu_parallelism));
-			Si::process_parameters parameters;
-			parameters.executable = m_exe;
-			parameters.current_path = build;
-			parameters.arguments = std::move(arguments);
-			int const rc = Si::run_process(parameters);
-			if (rc != 0)
-			{
-				throw std::runtime_error("Unexpected CMake return code");
-			}
-			return {};
-		}
-
-	private:
-
-		boost::filesystem::path m_exe;
-	};
 }
 
 BOOST_AUTO_TEST_CASE(find_executable_unix_test)
