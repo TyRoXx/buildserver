@@ -398,16 +398,8 @@ namespace lua
 		typedef basic_stack_value<std::integral_constant<int, 1>> stack_value;
 		typedef basic_stack_value<variable<int>> stack_array;
 
-		inline any_local at(stack_array const &array, int index)
-		{
-			assert(index < array.size());
-			return any_local(array.from_bottom() + index);
-		}
-
-		inline void push(lua_State &L, stack_value const &value)
-		{
-			lua_pushvalue(&L, value.from_bottom());
-		}
+		any_local at(stack_array const &array, int index);
+		void push(lua_State &L, stack_value const &value);
 
 		struct stack
 		{
@@ -578,17 +570,17 @@ namespace lua
 			}
 
 			template <class Key, class Element>
-			void set_element(any_local const &table, Key const &key, Element const &element)
+			void set_element(any_local const &table, Key &&key, Element &&element)
 			{
-				push(*m_state, key);
-				push(*m_state, element);
+				push(*m_state, std::forward<Key>(key));
+				push(*m_state, std::forward<Element>(element));
 				lua_settable(m_state.get(), table.from_bottom());
 			}
 
 			template <class Metatable>
-			void set_meta_table(any_local const &object, Metatable const &meta)
+			void set_meta_table(any_local const &object, Metatable &&meta)
 			{
-				push(*m_state, meta);
+				push(*m_state, std::forward<Metatable>(meta));
 				lua_setmetatable(m_state.get(), object.from_bottom());
 			}
 

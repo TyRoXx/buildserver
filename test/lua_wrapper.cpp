@@ -36,7 +36,7 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_call_multret)
 		lua::safe::stack_value compiled = s.load_buffer(
 					Si::make_memory_range(code),
 					"test");
-		lua::safe::stack_array results = s.call(compiled, lua::safe::no_arguments(), boost::none);
+		lua::safe::stack_array results = s.call(std::move(compiled), lua::safe::no_arguments(), boost::none);
 		BOOST_REQUIRE_EQUAL(3, results.size());
 		std::vector<lua_Number> result_numbers;
 		for (int i = 0; i < results.size(); ++i)
