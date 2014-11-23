@@ -283,24 +283,33 @@ namespace lua
 			};
 		}
 
-		struct stack_value
+		template <class T>
+		struct variable
 		{
-			stack_value() BOOST_NOEXCEPT
+			T value;
+		};
+
+		template <class Size>
+		struct basic_stack_value : private Size
+		{
+			basic_stack_value() BOOST_NOEXCEPT
 				: m_state(nullptr)
 			{
 			}
 
-			stack_value(lua_State &state, int address) BOOST_NOEXCEPT
-				: m_state(&state)
+			basic_stack_value(lua_State &state, int address, Size size = Size()) BOOST_NOEXCEPT
+				: Size(size)
+				, m_state(&state)
 				, m_address(address)
 #ifndef NDEBUG
 				, m_initial_top(lua_gettop(&state))
 #endif
 			{
-				assert(m_address > 0);
+				assert(m_address >= 1);
+				assert(m_initial_top >= Size::value);
 			}
 
-			stack_value(stack_value &&other) BOOST_NOEXCEPT
+			basic_stack_value(basic_stack_value &&other) BOOST_NOEXCEPT
 				: m_state(other.m_state)
 				, m_address(other.m_address)
 #ifndef NDEBUG
@@ -310,15 +319,25 @@ namespace lua
 				other.m_state = nullptr;
 			}
 
-			~stack_value() BOOST_NOEXCEPT
+			~basic_stack_value() BOOST_NOEXCEPT
 			{
 				if (!m_state)
 				{
 					return;
 				}
 				assert(lua_gettop(m_state) == m_initial_top);
-				lua_pop(m_state, 1);
-				assert(lua_gettop(m_state) == (m_initial_top - 1));
+				lua_pop(m_state, Size::value);
+				assert(lua_gettop(m_state) == (m_initial_top - Size::value));
+			}
+
+			int size() const BOOST_NOEXCEPT
+			{
+				return Size::value;
+			}
+
+			lua_State *state() const BOOST_NOEXCEPT
+			{
+				return m_state;
 			}
 
 			void push() const BOOST_NOEXCEPT
@@ -340,10 +359,19 @@ namespace lua
 			int m_initial_top;
 #endif
 
-			SILICIUM_DELETED_FUNCTION(stack_value(stack_value const &))
-			SILICIUM_DELETED_FUNCTION(stack_value &operator = (stack_value const &))
-			SILICIUM_DELETED_FUNCTION(stack_value &operator = (stack_value &&))
+			SILICIUM_DELETED_FUNCTION(basic_stack_value(basic_stack_value const &))
+			SILICIUM_DELETED_FUNCTION(basic_stack_value &operator = (basic_stack_value const &))
+			SILICIUM_DELETED_FUNCTION(basic_stack_value &operator = (basic_stack_value &&))
 		};
+
+		typedef basic_stack_value<std::integral_constant<int, 1>> stack_value;
+		typedef basic_stack_value<variable<int>> stack_array;
+
+		inline any_local at(stack_array const &array, int index)
+		{
+			assert(index < array.size());
+			return any_local(array.from_bottom() + index);
+		}
 
 		inline void push(lua_State &L, stack_value const &value)
 		{
@@ -422,6 +450,37 @@ namespace lua
 				array const results(top_before + 1, top_after_call - top_before);
 				detail::owner_of_the_top const owner(*m_state, results.length());
 				return on_results(results);
+			}
+
+			template <class Pushable, class ArgumentSource>
+			stack_array call(Pushable const &function, ArgumentSource &&arguments, boost::optional<int> expected_result_count)
+			{
+				int const top_before = checked_top();
+				push(*m_state, function);
+				assert(checked_top() == (top_before + 1));
+				int argument_count = 0;
+				for (;;)
+				{
+					auto argument = Si::get(arguments);
+					if (!argument)
+					{
+						break;
+					}
+					push(*m_state, *argument);
+					++argument_count;
+				}
+				assert(checked_top() == (top_before + 1 + argument_count));
+				int const nresults = expected_result_count ? *expected_result_count : LUA_MULTRET;
+				//TODO: stack trace in case of an error
+				if (lua_pcall(m_state.get(), argument_count, nresults, 0) != 0)
+				{
+					std::string message = lua_tostring(m_state.get(), -1);
+					lua_pop(m_state.get(), 1);
+					boost::throw_exception(lua_exception(std::move(message)));
+				}
+				int const top_after_call = checked_top();
+				assert(top_after_call >= top_before);
+				return stack_array(*m_state, top_before + 1, variable<int>{top_after_call - top_before});
 			}
 
 			template <class Pushable>
