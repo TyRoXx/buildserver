@@ -266,38 +266,6 @@ namespace lua
 		}
 	};
 
-	namespace detail
-	{
-		struct owner_of_the_top : boost::noncopyable
-		{
-			explicit owner_of_the_top(lua_State &lua, int count) BOOST_NOEXCEPT
-				: m_lua(lua)
-				, m_count(count)
-#ifndef NDEBUG
-				, m_initial_top(lua_gettop(&lua))
-#endif
-			{
-				assert(m_count >= 0);
-				assert(m_initial_top >= m_count);
-			}
-
-			~owner_of_the_top() BOOST_NOEXCEPT
-			{
-				assert(lua_gettop(&m_lua) == m_initial_top);
-				lua_pop(&m_lua, m_count);
-				assert(lua_gettop(&m_lua) == (m_initial_top - m_count));
-			}
-
-		private:
-
-			lua_State &m_lua;
-			int m_count;
-#ifndef NDEBUG
-			int m_initial_top;
-#endif
-		};
-	}
-
 	template <class T>
 	struct variable
 	{
