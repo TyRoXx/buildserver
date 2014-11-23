@@ -456,23 +456,19 @@ namespace lua
 				return on_result(typed_local<type::table>(lua_gettop(m_state.get())));
 			}
 
-			template <class Table, class Key, class Element>
-			void set_element(Table const &table, Key const &key, Element const &element)
+			template <class Key, class Element>
+			void set_element(any_local const &table, Key const &key, Element const &element)
 			{
-				push(*m_state, table);
-				detail::owner_of_the_top const table_owner(*m_state, 1);
 				push(*m_state, key);
 				push(*m_state, element);
-				lua_settable(m_state.get(), -3);
+				lua_settable(m_state.get(), table.from_bottom());
 			}
 
-			template <class Object, class Metatable>
-			void set_meta_table(Object const &object, Metatable const &meta)
+			template <class Metatable>
+			void set_meta_table(any_local const &object, Metatable const &meta)
 			{
-				push(*m_state, object);
-				detail::owner_of_the_top const object_owner(*m_state, 1);
 				push(*m_state, meta);
-				lua_setmetatable(m_state.get(), -2);
+				lua_setmetatable(m_state.get(), object.from_bottom());
 			}
 
 		private:
