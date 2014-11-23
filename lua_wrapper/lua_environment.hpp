@@ -320,6 +320,14 @@ namespace lua
 				return reference(*m_state, key);
 			}
 
+			template <class ResultHandler>
+			void register_function(int (*function)(lua_State *L), ResultHandler const &on_result)
+			{
+				lua_pushcfunction(m_state.get(), function);
+				detail::owner_of_the_top const owner(*m_state, 1);
+				on_result(typed_local<type::function>(lua_gettop(m_state.get())));
+			}
+
 			type get_type(any_local const &local)
 			{
 				return static_cast<type>(lua_type(m_state.get(), local.from_bottom()));

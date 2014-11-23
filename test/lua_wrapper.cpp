@@ -108,3 +108,29 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_reference)
 	BOOST_CHECK_EQUAL(boost::make_optional(3.0), result);
 	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
 }
+
+namespace
+{
+	int return_3(lua_State *L) BOOST_NOEXCEPT
+	{
+		lua_pushinteger(L, 3);
+		return 1;
+	}
+}
+
+BOOST_AUTO_TEST_CASE(lua_wrapper_register_c_function)
+{
+	auto state = lua::create_lua();
+	lua_State &L = *state;
+	lua::safe::stack s(std::move(state));
+	boost::optional<lua_Number> result;
+	s.register_function(return_3, [&](lua::safe::typed_local<lua::safe::type::function> func)
+	{
+		s.call(func, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
+		{
+			result = s.get_number(results[0]);
+		});
+	});
+	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
+	BOOST_CHECK_EQUAL(boost::make_optional(3.0), result);
+}
