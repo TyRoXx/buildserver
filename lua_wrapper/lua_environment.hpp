@@ -12,6 +12,7 @@
 #include <silicium/noexcept_string.hpp>
 #include <silicium/fast_variant.hpp>
 #include <silicium/source/empty.hpp>
+#include <silicium/source/single_source.hpp>
 
 namespace lua
 {
@@ -78,6 +79,11 @@ namespace lua
 			lua_pushlstring(&L, value.data(), value.size());
 		}
 
+		inline void push(lua_State &L, char const *c_str) BOOST_NOEXCEPT
+		{
+			lua_pushstring(&L, c_str);
+		}
+
 		inline void push(lua_State &L, bool value) BOOST_NOEXCEPT
 		{
 			lua_pushboolean(&L, value);
@@ -107,9 +113,15 @@ namespace lua
 
 		struct any_local : pushable
 		{
+			any_local() BOOST_NOEXCEPT
+				: m_from_bottom(-1)
+			{
+			}
+
 			explicit any_local(int from_bottom) BOOST_NOEXCEPT
 				: m_from_bottom(from_bottom)
 			{
+				assert(m_from_bottom >= 1);
 			}
 
 			int from_bottom() const BOOST_NOEXCEPT
@@ -119,6 +131,7 @@ namespace lua
 
 			virtual void push(lua_State &L) const SILICIUM_OVERRIDE
 			{
+				assert(m_from_bottom >= 1);
 				lua_pushvalue(&L, m_from_bottom);
 			}
 
@@ -160,6 +173,10 @@ namespace lua
 		template <type Type>
 		struct typed_local : any_local
 		{
+			typed_local() BOOST_NOEXCEPT
+			{
+			}
+
 			explicit typed_local(int from_bottom) BOOST_NOEXCEPT
 				: any_local(from_bottom)
 			{
@@ -242,19 +259,28 @@ namespace lua
 				explicit owner_of_the_top(lua_State &lua, int count) BOOST_NOEXCEPT
 					: m_lua(lua)
 					, m_count(count)
+#ifndef NDEBUG
+					, m_initial_top(lua_gettop(&lua))
+#endif
 				{
 					assert(m_count >= 0);
+					assert(m_initial_top >= m_count);
 				}
 
 				~owner_of_the_top() BOOST_NOEXCEPT
 				{
+					assert(lua_gettop(&m_lua) == m_initial_top);
 					lua_pop(&m_lua, m_count);
+					assert(lua_gettop(&m_lua) == (m_initial_top - m_count));
 				}
 
 			private:
 
 				lua_State &m_lua;
 				int m_count;
+#ifndef NDEBUG
+				int m_initial_top;
+#endif
 			};
 		}
 
@@ -286,9 +312,9 @@ namespace lua
 			template <class Pushable, class ArgumentSource, class ResultHandler>
 			void call(Pushable const &function, ArgumentSource &&arguments, boost::optional<int> expected_result_count, ResultHandler const &on_results)
 			{
-				int const top_before = lua_gettop(m_state.get());
+				int const top_before = checked_top();
 				push(*m_state, function);
-				assert(lua_gettop(m_state.get()) == (top_before + 1));
+				assert(checked_top() == (top_before + 1));
 				int argument_count = 0;
 				for (;;)
 				{
@@ -300,7 +326,7 @@ namespace lua
 					push(*m_state, *argument);
 					++argument_count;
 				}
-				assert(lua_gettop(m_state.get()) == (top_before + 1 + argument_count));
+				assert(checked_top() == (top_before + 1 + argument_count));
 				int const nresults = expected_result_count ? *expected_result_count : LUA_MULTRET;
 				//TODO: stack trace in case of an error
 				if (lua_pcall(m_state.get(), argument_count, nresults, 0) != 0)
@@ -309,7 +335,7 @@ namespace lua
 					lua_pop(m_state.get(), 1);
 					boost::throw_exception(lua_exception(std::move(message)));
 				}
-				int const top_after_call = lua_gettop(m_state.get());
+				int const top_after_call = checked_top();
 				assert(top_after_call >= top_before);
 				array const results(top_before + 1, top_after_call - top_before);
 				detail::owner_of_the_top const owner(*m_state, results.length());
@@ -329,12 +355,15 @@ namespace lua
 			{
 				lua_pushcfunction(m_state.get(), function);
 				detail::owner_of_the_top const owner(*m_state, 1);
-				on_result(typed_local<type::function>(lua_gettop(m_state.get())));
+				on_result(typed_local<type::function>(checked_top()));
 			}
 
 			template <class ResultHandler, class UpvalueSource>
 			void register_function(int (*function)(lua_State *L), UpvalueSource &&values, ResultHandler const &on_result)
 			{
+#ifndef NDEBUG
+				int const initial_top = checked_top();
+#endif
 				int upvalue_count = 0;
 				for (;;)
 				{
@@ -345,10 +374,14 @@ namespace lua
 					}
 					push(*m_state, *value);
 					++upvalue_count;
+					assert(checked_top() == (initial_top + upvalue_count));
 				}
+				assert(checked_top() >= upvalue_count);
 				lua_pushcclosure(m_state.get(), function, upvalue_count);
+				int const top = checked_top();
+				assert(top >= 1);
 				detail::owner_of_the_top const owner(*m_state, 1);
-				on_result(typed_local<type::function>(lua_gettop(m_state.get())));
+				on_result(typed_local<type::function>(top));
 			}
 
 			type get_type(any_local const &local)
@@ -369,6 +402,11 @@ namespace lua
 			bool to_boolean(any_local const &local)
 			{
 				return lua_toboolean(m_state.get(), local.from_bottom());
+			}
+
+			void *to_user_data(any_local const &local)
+			{
+				return lua_touserdata(m_state.get(), local.from_bottom());
 			}
 
 			boost::optional<lua_Number> get_number(any_local const &local)
@@ -401,10 +439,110 @@ namespace lua
 				return to_boolean(local);
 			}
 
+			template <class ResultHandler>
+			void create_user_data(std::size_t size, ResultHandler const &on_result)
+			{
+				void *user_data = lua_newuserdata(m_state.get(), size);
+				assert(size == 0 || user_data);
+				detail::owner_of_the_top const owner(*m_state, 1);
+				on_result(typed_local<type::user_data>(lua_gettop(m_state.get())));
+			}
+
+			template <class ResultHandler>
+			void create_table(ResultHandler const &on_result)
+			{
+				lua_createtable(m_state.get(), 0, 0);
+				detail::owner_of_the_top const owner(*m_state, 1);
+				on_result(typed_local<type::table>(lua_gettop(m_state.get())));
+			}
+
+			template <class Table, class Key, class Element>
+			void set_element(Table const &table, Key const &key, Element const &element)
+			{
+				push(*m_state, table);
+				detail::owner_of_the_top const table_owner(*m_state, 1);
+				push(*m_state, key);
+				push(*m_state, element);
+				lua_settable(m_state.get(), -3);
+			}
+
+			template <class Object, class Metatable>
+			void set_meta_table(Object const &object, Metatable const &meta)
+			{
+				push(*m_state, object);
+				detail::owner_of_the_top const object_owner(*m_state, 1);
+				push(*m_state, meta);
+				lua_setmetatable(m_state.get(), -2);
+			}
+
 		private:
 
 			state_ptr m_state;
+
+			int checked_top() const BOOST_NOEXCEPT
+			{
+				int top = lua_gettop(m_state.get());
+				assert(top >= 0);
+				return top;
+			}
 		};
+
+		namespace detail
+		{
+			template <class Function>
+			int call_upvalue_function(lua_State *L) BOOST_NOEXCEPT
+			{
+				Function * const f_stored = static_cast<Function *>(lua_touserdata(L, lua_upvalueindex(1)));
+				assert(f_stored);
+				return (*f_stored)(L);
+			}
+
+			template <class Function>
+			int delete_function(lua_State *L) BOOST_NOEXCEPT
+			{
+				Function * const function = static_cast<Function *>(lua_touserdata(L, -1));
+				assert(function);
+				function->~Function();
+				return 0;
+			}
+
+			struct placement_destructor
+			{
+				template <class T>
+				void operator()(T *object) const BOOST_NOEXCEPT
+				{
+					object->~T();
+				}
+			};
+		}
+
+		template <class Function, class ResultHandler>
+		void register_closure(stack &s, Function &&f, ResultHandler const &on_result)
+		{
+			typedef typename std::decay<Function>::type clean_function;
+			s.create_user_data(sizeof(f), [&](typed_local<type::user_data> data)
+			{
+				clean_function * const f_stored = static_cast<clean_function *>(s.to_user_data(data));
+				assert(f_stored);
+				new (f_stored) clean_function{std::forward<Function>(f)};
+				std::unique_ptr<clean_function, detail::placement_destructor> f_stored_handle(f_stored);
+				s.create_table([&](typed_local<type::table> meta_table)
+				{
+					//TODO: cache metatable
+					s.register_function(detail::delete_function<clean_function>, [&](typed_local<type::function> destructor)
+					{
+						s.set_element(meta_table, "__gc", destructor);
+					});
+					s.set_meta_table(data, meta_table);
+					f_stored_handle.release();
+					s.register_function(
+						detail::call_upvalue_function<clean_function>,
+						Si::make_single_source(data),
+						on_result
+					);
+				});
+			});
+		}
 
 		inline Si::empty_source<pushable *> no_arguments()
 		{

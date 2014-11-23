@@ -162,3 +162,29 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_c_closure)
 	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
 	BOOST_CHECK_EQUAL(boost::make_optional(-1.0), result);
 }
+
+BOOST_AUTO_TEST_CASE(lua_wrapper_register_cpp_closure)
+{
+	auto state = lua::create_lua();
+	lua_State &L = *state;
+	lua::safe::stack s(std::move(state));
+	boost::optional<lua_Number> result;
+	auto bound = Si::make_unique<lua_Number>(2);
+	lua::safe::register_closure(
+		s,
+		[bound = std::move(bound)](lua_State *L)
+		{
+			lua_pushnumber(L, *bound);
+			return 1;
+		},
+		[&](lua::safe::typed_local<lua::safe::type::function> closure)
+		{
+			s.call(closure, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
+			{
+				result = s.get_number(results[0]);
+			});
+		}
+	);
+	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
+	BOOST_CHECK_EQUAL(boost::make_optional(2.0), result);
+}
