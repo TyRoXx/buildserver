@@ -283,6 +283,73 @@ namespace lua
 			};
 		}
 
+		struct stack_value
+		{
+			stack_value() BOOST_NOEXCEPT
+				: m_state(nullptr)
+			{
+			}
+
+			stack_value(lua_State &state, int address) BOOST_NOEXCEPT
+				: m_state(&state)
+				, m_address(address)
+#ifndef NDEBUG
+				, m_initial_top(lua_gettop(&state))
+#endif
+			{
+				assert(m_address > 0);
+			}
+
+			stack_value(stack_value &&other) BOOST_NOEXCEPT
+				: m_state(other.m_state)
+				, m_address(other.m_address)
+#ifndef NDEBUG
+				, m_initial_top(other.m_initial_top)
+#endif
+			{
+				other.m_state = nullptr;
+			}
+
+			~stack_value() BOOST_NOEXCEPT
+			{
+				if (!m_state)
+				{
+					return;
+				}
+				assert(lua_gettop(m_state) == m_initial_top);
+				lua_pop(m_state, 1);
+				assert(lua_gettop(m_state) == (m_initial_top - 1));
+			}
+
+			void push() const BOOST_NOEXCEPT
+			{
+				assert(m_state);
+				lua_pushvalue(m_state, m_address);
+			}
+
+			int from_bottom() const BOOST_NOEXCEPT
+			{
+				return m_address;
+			}
+
+		private:
+
+			lua_State *m_state;
+			int m_address;
+#ifndef NDEBUG
+			int m_initial_top;
+#endif
+
+			SILICIUM_DELETED_FUNCTION(stack_value(stack_value const &))
+			SILICIUM_DELETED_FUNCTION(stack_value &operator = (stack_value const &))
+			SILICIUM_DELETED_FUNCTION(stack_value &operator = (stack_value &&))
+		};
+
+		inline void push(lua_State &L, stack_value const &value)
+		{
+			lua_pushvalue(&L, value.from_bottom());
+		}
+
 		struct stack
 		{
 			stack() BOOST_NOEXCEPT
@@ -311,6 +378,17 @@ namespace lua
 				int top = lua_gettop(m_state.get());
 				typed_local<type::function> compiled(top);
 				return on_success(compiled);
+			}
+
+			stack_value load_buffer(Si::memory_range code, char const *name)
+			{
+				auto error = lua::load_buffer(*m_state, code, name);
+				if (error)
+				{
+					boost::throw_exception(boost::system::system_error(error));
+				}
+				int top = lua_gettop(m_state.get());
+				return stack_value(*m_state, top);
 			}
 
 			template <class Pushable, class ArgumentSource, class ResultHandler>
