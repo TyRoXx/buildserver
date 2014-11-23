@@ -118,13 +118,36 @@ namespace lua
 			}
 		};
 
+		namespace detail
+		{
+			struct owner_of_the_top : boost::noncopyable
+			{
+				explicit owner_of_the_top(lua_State &lua, int count) BOOST_NOEXCEPT
+					: m_lua(lua)
+					, m_count(count)
+				{
+					assert(m_count >= 0);
+				}
+
+				~owner_of_the_top() BOOST_NOEXCEPT
+				{
+					lua_pop(&m_lua, m_count);
+				}
+
+			private:
+
+				lua_State &m_lua;
+				int m_count;
+			};
+		}
+
 		struct stack
 		{
-			stack()
+			stack() BOOST_NOEXCEPT
 			{
 			}
 
-			explicit stack(state_ptr state)
+			explicit stack(state_ptr state) BOOST_NOEXCEPT
 				: m_state(std::move(state))
 			{
 			}
@@ -137,13 +160,10 @@ namespace lua
 				{
 					boost::throw_exception(boost::system::system_error(error));
 				}
+				detail::owner_of_the_top const owner(*m_state, 1);
 				int top = lua_gettop(m_state.get());
 				typed_local<type::function> compiled(top);
 				on_success(compiled);
-				if (lua_gettop(m_state.get()) == top)
-				{
-					lua_pop(m_state.get(), 1);
-				}
 			}
 
 			template <class ArgumentSource, class ResultHandler>
@@ -171,8 +191,8 @@ namespace lua
 					boost::throw_exception(lua_exception(std::move(message)));
 				}
 				array const results(stack_before + 1, lua_gettop(m_state.get()) - stack_before);
+				detail::owner_of_the_top const owner(*m_state, results.length());
 				on_results(results);
-				lua_pop(m_state.get(), results.length());
 			}
 
 			lua_Number to_number(any_local const &local)
