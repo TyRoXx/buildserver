@@ -28,6 +28,29 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_load_buffer)
 	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
 }
 
+BOOST_AUTO_TEST_CASE(lua_wrapper_call_multret)
+{
+	auto state = lua::create_lua();
+	lua_State &L = *state;
+	lua::safe::stack s(std::move(state));
+	std::string const code = "return 1, 2, 3";
+	std::vector<lua_Number> result_numbers;
+	s.load_buffer(Si::make_memory_range(code), "test", [&](lua::safe::typed_local<lua::safe::type::function> compiled)
+	{
+		s.call(compiled, lua::safe::no_arguments(), boost::none, [&](lua::safe::array results)
+		{
+			BOOST_REQUIRE_EQUAL(3, results.length());
+			for (int i = 0; i < results.length(); ++i)
+			{
+				result_numbers.emplace_back(s.to_number(results[i]));
+			}
+		});
+	});
+	std::vector<lua_Number> const expected{1, 2, 3};
+	BOOST_CHECK_EQUAL_COLLECTIONS(expected.begin(), expected.end(), result_numbers.begin(), result_numbers.end());
+	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
+}
+
 BOOST_AUTO_TEST_CASE(lua_wrapper_call)
 {
 	auto state = lua::create_lua();
