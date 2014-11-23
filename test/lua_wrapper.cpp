@@ -17,12 +17,14 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_load_buffer)
 	lua_State &L = *state;
 	lua::safe::stack s(std::move(state));
 	std::string const code = "return 3";
-	boost::optional<lua_Number> result;
-	s.load_buffer(Si::make_memory_range(code), "test", [&](lua::safe::typed_local<lua::safe::type::function> compiled)
+	boost::optional<lua_Number> const result = s.load_buffer(
+		Si::make_memory_range(code),
+		"test",
+		[&](lua::safe::typed_local<lua::safe::type::function> compiled)
 	{
-		s.call(compiled, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
+		return s.call(compiled, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
 		{
-			result = s.get_number(results[0]);
+			return s.get_number(results[0]);
 		});
 	});
 	BOOST_CHECK_EQUAL(boost::make_optional(3.0), result);
@@ -35,16 +37,20 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_call_multret)
 	lua_State &L = *state;
 	lua::safe::stack s(std::move(state));
 	std::string const code = "return 1, 2, 3";
-	std::vector<lua_Number> result_numbers;
-	s.load_buffer(Si::make_memory_range(code), "test", [&](lua::safe::typed_local<lua::safe::type::function> compiled)
+	std::vector<lua_Number> const result_numbers = s.load_buffer(
+		Si::make_memory_range(code),
+		"test",
+		[&](lua::safe::typed_local<lua::safe::type::function> compiled)
 	{
-		s.call(compiled, lua::safe::no_arguments(), boost::none, [&](lua::safe::array results)
+		return s.call(compiled, lua::safe::no_arguments(), boost::none, [&](lua::safe::array results)
 		{
 			BOOST_REQUIRE_EQUAL(3, results.length());
+			std::vector<lua_Number> result_numbers;
 			for (int i = 0; i < results.length(); ++i)
 			{
 				result_numbers.emplace_back(s.to_number(results[i]));
 			}
+			return result_numbers;
 		});
 	});
 	std::vector<lua_Number> const expected{1, 2, 3};
@@ -94,17 +100,18 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_reference)
 	lua_State &L = *state;
 	lua::safe::stack s(std::move(state));
 	std::string const code = "return 3";
-	lua::safe::reference ref;
-	s.load_buffer(Si::make_memory_range(code), "test", [&](lua::safe::typed_local<lua::safe::type::function> compiled)
+	lua::safe::reference const ref = s.load_buffer(
+		Si::make_memory_range(code),
+		"test",
+		[&](lua::safe::typed_local<lua::safe::type::function> compiled)
 	{
-		ref = s.create_reference(compiled);
+		return s.create_reference(compiled);
 	});
 	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
 	BOOST_REQUIRE(!ref.empty());
-	boost::optional<lua_Number> result;
-	s.call(ref, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
+	boost::optional<lua_Number> const result = s.call(ref, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
 	{
-		result = s.get_number(results[0]);
+		return s.get_number(results[0]);
 	});
 	BOOST_CHECK_EQUAL(boost::make_optional(3.0), result);
 	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
@@ -124,12 +131,11 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_c_function)
 	auto state = lua::create_lua();
 	lua_State &L = *state;
 	lua::safe::stack s(std::move(state));
-	boost::optional<lua_Number> result;
-	s.register_function(return_3, [&](lua::safe::typed_local<lua::safe::type::function> func)
+	boost::optional<lua_Number> const result = s.register_function(return_3, [&](lua::safe::typed_local<lua::safe::type::function> func)
 	{
-		s.call(func, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
+		return s.call(func, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
 		{
-			result = s.get_number(results[0]);
+			return s.get_number(results[0]);
 		});
 	});
 	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
@@ -150,13 +156,12 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_c_closure)
 	auto state = lua::create_lua();
 	lua_State &L = *state;
 	lua::safe::stack s(std::move(state));
-	boost::optional<lua_Number> result;
 	std::array<lua_Number, 2> const upvalues{{1.0, 2.0}};
-	s.register_function(return_upvalues_subtracted, Si::make_container_source(upvalues), [&](lua::safe::typed_local<lua::safe::type::function> func)
+	boost::optional<lua_Number> const result = s.register_function(return_upvalues_subtracted, Si::make_container_source(upvalues), [&](lua::safe::typed_local<lua::safe::type::function> func)
 	{
-		s.call(func, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
+		return s.call(func, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
 		{
-			result = s.get_number(results[0]);
+			return s.get_number(results[0]);
 		});
 	});
 	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
@@ -168,9 +173,8 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_cpp_closure)
 	auto state = lua::create_lua();
 	lua_State &L = *state;
 	lua::safe::stack s(std::move(state));
-	boost::optional<lua_Number> result;
 	auto bound = Si::make_unique<lua_Number>(2);
-	lua::safe::register_closure(
+	boost::optional<lua_Number> const result = lua::safe::register_closure(
 		s,
 		[bound = std::move(bound)](lua_State *L)
 		{
@@ -179,9 +183,9 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_cpp_closure)
 		},
 		[&](lua::safe::typed_local<lua::safe::type::function> closure)
 		{
-			s.call(closure, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
+			return s.call(closure, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
 			{
-				result = s.get_number(results[0]);
+				return s.get_number(results[0]);
 			});
 		}
 	);
