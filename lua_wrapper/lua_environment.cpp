@@ -54,12 +54,6 @@ namespace lua
 		return boost::system::error_code();
 	}
 
-	any_local at(stack_array const &array, int index)
-	{
-		assert(index < array.size());
-		return any_local(array.from_bottom() + index);
-	}
-
 	void push(lua_State &L, stack_value const &value)
 	{
 		lua_pushvalue(&L, value.from_bottom());

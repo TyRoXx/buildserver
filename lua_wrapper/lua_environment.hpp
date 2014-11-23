@@ -396,7 +396,13 @@ namespace lua
 	typedef basic_stack_value<std::integral_constant<int, 1>> stack_value;
 	typedef basic_stack_value<variable<int>> stack_array;
 
-	any_local at(stack_array const &array, int index);
+	template <class Size>
+	any_local at(basic_stack_value<Size> const &array, int index)
+	{
+		assert(index < array.size());
+		return any_local(array.from_bottom() + index);
+	}
+
 	void push(lua_State &L, stack_value const &value);
 
 	struct stack
@@ -455,6 +461,15 @@ namespace lua
 			int const top_after_call = checked_top();
 			assert(top_after_call >= top_before);
 			return stack_array(*m_state, top_before + 1, variable<int>{top_after_call - top_before});
+		}
+
+		template <class Pushable, class ArgumentSource>
+		stack_value call(Pushable const &function, ArgumentSource &&arguments, std::integral_constant<int, 1> expected_result_count)
+		{
+			stack_array results = call(function, arguments, expected_result_count.value);
+			int where = results.from_bottom();
+			results.release();
+			return stack_value(*m_state, where);
 		}
 
 		template <class Pushable>
@@ -669,6 +684,11 @@ namespace lua
 	}
 
 	inline Si::empty_source<pushable *> no_arguments()
+	{
+		return {};
+	}
+
+	inline std::integral_constant<int, 1> one()
 	{
 		return {};
 	}

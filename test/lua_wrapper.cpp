@@ -19,7 +19,7 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_load_buffer)
 	std::string const code = "return 3";
 	{
 		lua::stack_value const compiled = s.load_buffer(Si::make_memory_range(code), "test");
-		lua::stack_array const results = s.call(compiled, lua::no_arguments(), 1);
+		lua::stack_value const results = s.call(compiled, lua::no_arguments(), lua::one());
 		auto result = s.get_number(lua::at(results, 0));
 		BOOST_CHECK_EQUAL(boost::make_optional(3.0), result);
 	}
