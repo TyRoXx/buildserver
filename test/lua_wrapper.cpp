@@ -86,3 +86,25 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_call)
 	BOOST_CHECK_EQUAL(boost::make_optional(true), result_bool);
 	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
 }
+
+BOOST_AUTO_TEST_CASE(lua_wrapper_reference)
+{
+	auto state = lua::create_lua();
+	lua_State &L = *state;
+	lua::safe::stack s(std::move(state));
+	std::string const code = "return 3";
+	lua::safe::reference ref;
+	s.load_buffer(Si::make_memory_range(code), "test", [&](lua::safe::typed_local<lua::safe::type::function> compiled)
+	{
+		ref = s.create_reference(compiled);
+	});
+	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
+	BOOST_REQUIRE(!ref.empty());
+	boost::optional<lua_Number> result;
+	s.call(ref, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
+	{
+		result = s.get_number(results[0]);
+	});
+	BOOST_CHECK_EQUAL(boost::make_optional(3.0), result);
+	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
+}

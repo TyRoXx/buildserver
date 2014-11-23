@@ -51,7 +51,7 @@ namespace lua
 
 		struct pushable
 		{
-			virtual ~pushable()
+			virtual ~pushable() BOOST_NOEXCEPT
 			{
 			}
 			virtual void push(lua_State &L) const = 0;
@@ -68,17 +68,17 @@ namespace lua
 			push(L, *p);
 		}
 
-		inline void push(lua_State &L, lua_Number value)
+		inline void push(lua_State &L, lua_Number value) BOOST_NOEXCEPT
 		{
 			lua_pushnumber(&L, value);
 		}
 
-		inline void push(lua_State &L, Si::noexcept_string const &value)
+		inline void push(lua_State &L, Si::noexcept_string const &value) BOOST_NOEXCEPT
 		{
 			lua_pushlstring(&L, value.data(), value.size());
 		}
 
-		inline void push(lua_State &L, bool value)
+		inline void push(lua_State &L, bool value) BOOST_NOEXCEPT
 		{
 			lua_pushboolean(&L, value);
 		}
@@ -107,12 +107,12 @@ namespace lua
 
 		struct any_local : pushable
 		{
-			explicit any_local(int from_bottom)
+			explicit any_local(int from_bottom) BOOST_NOEXCEPT
 				: m_from_bottom(from_bottom)
 			{
 			}
 
-			int from_bottom() const
+			int from_bottom() const BOOST_NOEXCEPT
 			{
 				return m_from_bottom;
 			}
@@ -129,23 +129,23 @@ namespace lua
 
 		struct array
 		{
-			array(int begin, int length)
+			array(int begin, int length) BOOST_NOEXCEPT
 				: m_begin(begin)
 				, m_length(length)
 			{
 			}
 
-			int begin() const
+			int begin() const BOOST_NOEXCEPT
 			{
 				return m_begin;
 			}
 
-			int length() const
+			int length() const BOOST_NOEXCEPT
 			{
 				return m_length;
 			}
 
-			any_local operator[](int index) const
+			any_local operator[](int index) const BOOST_NOEXCEPT
 			{
 				assert(index < m_length);
 				return any_local(m_begin + index);
@@ -160,11 +160,72 @@ namespace lua
 		template <type Type>
 		struct typed_local : any_local
 		{
-			explicit typed_local(int from_bottom)
+			explicit typed_local(int from_bottom) BOOST_NOEXCEPT
 				: any_local(from_bottom)
 			{
 			}
 		};
+
+		struct reference
+		{
+			reference() BOOST_NOEXCEPT
+				: m_state(nullptr)
+			{
+			}
+
+			explicit reference(lua_State &state, int key) BOOST_NOEXCEPT
+				: m_state(&state)
+				, m_key(key)
+			{
+			}
+
+			reference(reference &&other) BOOST_NOEXCEPT
+				: m_state(other.m_state)
+				, m_key(other.m_key)
+			{
+				other.m_state = nullptr;
+			}
+
+			reference &operator = (reference &&other) BOOST_NOEXCEPT
+			{
+				std::swap(m_state, other.m_state);
+				std::swap(m_key, other.m_key);
+				return *this;
+			}
+
+			~reference() BOOST_NOEXCEPT
+			{
+				if (!m_state)
+				{
+					return;
+				}
+				luaL_unref(m_state, LUA_REGISTRYINDEX, m_key);
+			}
+
+			bool empty() const BOOST_NOEXCEPT
+			{
+				return !m_state;
+			}
+
+			void push() const BOOST_NOEXCEPT
+			{
+				assert(!empty());
+				lua_rawgeti(m_state, LUA_REGISTRYINDEX, m_key);
+			}
+
+		private:
+
+			lua_State *m_state;
+			int m_key;
+
+			SILICIUM_DELETED_FUNCTION(reference(reference const &))
+			SILICIUM_DELETED_FUNCTION(reference &operator = (reference const &))
+		};
+
+		inline void push(lua_State &, reference const &ref) BOOST_NOEXCEPT
+		{
+			ref.push();
+		}
 
 		struct lua_exception : std::runtime_error
 		{
@@ -249,6 +310,14 @@ namespace lua
 				array const results(stack_before + 1, lua_gettop(m_state.get()) - stack_before);
 				detail::owner_of_the_top const owner(*m_state, results.length());
 				on_results(results);
+			}
+
+			template <class Pushable>
+			reference create_reference(Pushable const &value)
+			{
+				push(*m_state, value);
+				int key = luaL_ref(m_state.get(), LUA_REGISTRYINDEX);
+				return reference(*m_state, key);
 			}
 
 			type get_type(any_local const &local)
