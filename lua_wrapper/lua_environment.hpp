@@ -71,7 +71,7 @@ namespace lua
 			int m_from_bottom;
 		};
 
-		struct array : private boost::noncopyable
+		struct array
 		{
 			array(int begin, int length)
 				: m_begin(begin)

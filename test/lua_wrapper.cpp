@@ -16,9 +16,9 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_load)
 	lua::safe::stack s(std::move(state));
 	std::string const code = "return 3";
 	boost::optional<lua_Number> result;
-	s.load_buffer(Si::make_memory_range(code), "test", [&](lua::safe::typed_local<lua::safe::type::function> &compiled)
+	s.load_buffer(Si::make_memory_range(code), "test", [&](lua::safe::typed_local<lua::safe::type::function> compiled)
 	{
-		s.call(compiled, lua::safe::no_arguments(), 1, [&](lua::safe::array const &results)
+		s.call(compiled, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
 		{
 			result = s.to_number(results[0]);
 		});
