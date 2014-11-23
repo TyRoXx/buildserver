@@ -9,6 +9,8 @@
 #include <silicium/memory_range.hpp>
 #include <silicium/config.hpp>
 #include <silicium/override.hpp>
+#include <silicium/noexcept_string.hpp>
+#include <silicium/fast_variant.hpp>
 #include <silicium/source/empty.hpp>
 
 namespace lua
@@ -69,6 +71,33 @@ namespace lua
 		inline void push(lua_State &L, lua_Number value)
 		{
 			lua_pushnumber(&L, value);
+		}
+
+		inline void push(lua_State &L, Si::noexcept_string const &value)
+		{
+			lua_pushlstring(&L, value.data(), value.size());
+		}
+
+		namespace detail
+		{
+			struct pusher
+			{
+				typedef void result_type;
+
+				lua_State *L;
+
+				template <class T>
+				void operator()(T const &value) const
+				{
+					push(*L, value);
+				}
+			};
+		}
+
+		template <class ...T>
+		inline void push(lua_State &L, Si::fast_variant<T...> const &value)
+		{
+			return Si::apply_visitor(detail::pusher{&L}, value);
 		}
 
 		struct any_local : pushable
@@ -227,6 +256,11 @@ namespace lua
 				return lua_tonumber(m_state.get(), local.from_bottom());
 			}
 
+			Si::noexcept_string to_string(any_local const &local)
+			{
+				return lua_tostring(m_state.get(), local.from_bottom());
+			}
+
 			boost::optional<lua_Number> get_number(any_local const &local)
 			{
 				type const t = get_type(local);
@@ -235,6 +269,16 @@ namespace lua
 					return boost::none;
 				}
 				return to_number(local);
+			}
+
+			boost::optional<Si::noexcept_string> get_string(any_local const &local)
+			{
+				type const t = get_type(local);
+				if (t != type::string)
+				{
+					return boost::none;
+				}
+				return to_string(local);
 			}
 
 		private:
