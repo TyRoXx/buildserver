@@ -49,6 +49,23 @@ namespace lua
 			thread = LUA_TTHREAD
 		};
 
+		inline std::ostream &operator << (std::ostream &out, type value)
+		{
+			switch (value)
+			{
+			case type::nil: return out << "nil";
+			case type::boolean: return out << "boolean";
+			case type::light_user_data: return out << "light_user_data";
+			case type::number: return out << "number";
+			case type::string: return out << "string";
+			case type::table: return out << "table";
+			case type::function: return out << "function";
+			case type::user_data: return out << "user_data";
+			case type::thread: return out << "thread";
+			}
+			return out << "??";
+		}
+
 		struct pushable
 		{
 			virtual ~pushable() BOOST_NOEXCEPT
@@ -325,9 +342,18 @@ namespace lua
 				{
 					return;
 				}
-				assert(lua_gettop(m_state) == m_initial_top);
+#ifndef NDEBUG
+				int current_top = lua_gettop(m_state);
+#endif
+				assert(current_top == m_initial_top);
 				lua_pop(m_state, Size::value);
 				assert(lua_gettop(m_state) == (m_initial_top - Size::value));
+			}
+
+			void release() BOOST_NOEXCEPT
+			{
+				assert(m_state);
+				m_state = nullptr;
 			}
 
 			int size() const BOOST_NOEXCEPT
@@ -349,6 +375,11 @@ namespace lua
 			int from_bottom() const BOOST_NOEXCEPT
 			{
 				return m_address;
+			}
+
+			type get_type() const BOOST_NOEXCEPT
+			{
+				return static_cast<type>(lua_type(m_state, m_address));
 			}
 
 		private:
@@ -394,20 +425,6 @@ namespace lua
 				return m_state.get();
 			}
 
-			template <class SuccessHandler>
-			auto load_buffer(Si::memory_range code, char const *name, SuccessHandler const &on_success)
-			{
-				auto error = lua::load_buffer(*m_state, code, name);
-				if (error)
-				{
-					boost::throw_exception(boost::system::system_error(error));
-				}
-				detail::owner_of_the_top const owner(*m_state, 1);
-				int top = lua_gettop(m_state.get());
-				typed_local<type::function> compiled(top);
-				return on_success(compiled);
-			}
-
 			stack_value load_buffer(Si::memory_range code, char const *name)
 			{
 				auto error = lua::load_buffer(*m_state, code, name);
@@ -417,39 +434,6 @@ namespace lua
 				}
 				int top = lua_gettop(m_state.get());
 				return stack_value(*m_state, top);
-			}
-
-			template <class Pushable, class ArgumentSource, class ResultHandler>
-			auto call(Pushable const &function, ArgumentSource &&arguments, boost::optional<int> expected_result_count, ResultHandler const &on_results)
-			{
-				int const top_before = checked_top();
-				push(*m_state, function);
-				assert(checked_top() == (top_before + 1));
-				int argument_count = 0;
-				for (;;)
-				{
-					auto argument = Si::get(arguments);
-					if (!argument)
-					{
-						break;
-					}
-					push(*m_state, *argument);
-					++argument_count;
-				}
-				assert(checked_top() == (top_before + 1 + argument_count));
-				int const nresults = expected_result_count ? *expected_result_count : LUA_MULTRET;
-				//TODO: stack trace in case of an error
-				if (lua_pcall(m_state.get(), argument_count, nresults, 0) != 0)
-				{
-					std::string message = lua_tostring(m_state.get(), -1);
-					lua_pop(m_state.get(), 1);
-					boost::throw_exception(lua_exception(std::move(message)));
-				}
-				int const top_after_call = checked_top();
-				assert(top_after_call >= top_before);
-				array const results(top_before + 1, top_after_call - top_before);
-				detail::owner_of_the_top const owner(*m_state, results.length());
-				return on_results(results);
 			}
 
 			template <class Pushable, class ArgumentSource>
@@ -491,27 +475,21 @@ namespace lua
 				return reference(*m_state, key);
 			}
 
-			template <class ResultHandler>
-			auto register_function(int (*function)(lua_State *L), ResultHandler const &on_result)
+			stack_value register_function(int (*function)(lua_State *L))
 			{
 				lua_pushcfunction(m_state.get(), function);
-				detail::owner_of_the_top const owner(*m_state, 1);
-				return on_result(typed_local<type::function>(checked_top()));
+				return stack_value(*m_state, checked_top());
 			}
 
-			template <class ResultHandler>
-			auto register_function_with_existing_upvalues(int (*function)(lua_State *L), int upvalue_count, ResultHandler const &on_result)
+			stack_value register_function_with_existing_upvalues(int (*function)(lua_State *L), int upvalue_count)
 			{
 				assert(checked_top() >= upvalue_count);
 				lua_pushcclosure(m_state.get(), function, upvalue_count);
-				int const top = checked_top();
-				assert(top >= 1);
-				detail::owner_of_the_top const owner(*m_state, 1);
-				return on_result(typed_local<type::function>(top));
+				return stack_value(*m_state, checked_top());
 			}
 
-			template <class ResultHandler, class UpvalueSource>
-			auto register_function(int (*function)(lua_State *L), UpvalueSource &&values, ResultHandler const &on_result)
+			template <class UpvalueSource>
+			stack_value register_function(int (*function)(lua_State *L), UpvalueSource &&values)
 			{
 #ifndef NDEBUG
 				int const initial_top = checked_top();
@@ -528,7 +506,7 @@ namespace lua
 					++upvalue_count;
 					assert(checked_top() == (initial_top + upvalue_count));
 				}
-				return register_function_with_existing_upvalues(function, upvalue_count, on_result);
+				return register_function_with_existing_upvalues(function, upvalue_count);
 			}
 
 			type get_type(any_local const &local)
@@ -586,21 +564,17 @@ namespace lua
 				return to_boolean(local);
 			}
 
-			template <class ResultHandler>
-			auto create_user_data(std::size_t size, ResultHandler const &on_result)
+			stack_value create_user_data(std::size_t size)
 			{
 				void *user_data = lua_newuserdata(m_state.get(), size);
 				assert(size == 0 || user_data);
-				detail::owner_of_the_top const owner(*m_state, 1);
-				return on_result(typed_local<type::user_data>(lua_gettop(m_state.get())));
+				return stack_value(*m_state, checked_top());
 			}
 
-			template <class ResultHandler>
-			auto create_table(ResultHandler const &on_result, int array_size = 0, int non_array_size = 0)
+			stack_value create_table(int array_size = 0, int non_array_size = 0)
 			{
 				lua_createtable(m_state.get(), array_size, non_array_size);
-				detail::owner_of_the_top const owner(*m_state, 1);
-				return on_result(typed_local<type::table>(lua_gettop(m_state.get())));
+				return stack_value(*m_state, checked_top());
 			}
 
 			template <class Key, class Element>
@@ -659,50 +633,49 @@ namespace lua
 			};
 		}
 
-		template <class Function, class UpvalueSource, class ResultHandler>
-		auto register_closure(stack &s, Function &&f, UpvalueSource &&upvalues, ResultHandler const &on_result)
+		template <class Function, class UpvalueSource>
+		auto register_closure(stack &s, Function &&f, UpvalueSource &&upvalues)
 		{
 			typedef typename std::decay<Function>::type clean_function;
-			return s.create_user_data(sizeof(f), [&](typed_local<type::user_data> data)
+			stack_value data = s.create_user_data(sizeof(f));
 			{
-				clean_function * const f_stored = static_cast<clean_function *>(s.to_user_data(data));
+				clean_function * const f_stored = static_cast<clean_function *>(s.to_user_data(any_local(data.from_bottom())));
 				assert(f_stored);
 				new (f_stored) clean_function{std::forward<Function>(f)};
 				std::unique_ptr<clean_function, detail::placement_destructor> f_stored_handle(f_stored);
-				return s.create_table([&](typed_local<type::table> meta_table)
 				{
+					stack_value meta_table = s.create_table();
 					//TODO: cache metatable
-					s.register_function(detail::delete_function<clean_function>, [&](typed_local<type::function> destructor)
 					{
-						s.set_element(meta_table, "__gc", destructor);
-					});
-					s.set_meta_table(data, meta_table);
-					f_stored_handle.release();
-					data.push(*s.state());
-					int upvalue_count = 1;
-					for (;;)
-					{
-						auto value = Si::get(upvalues);
-						if (!value)
-						{
-							break;
-						}
-						push(*s.state(), *value);
-						++upvalue_count;
+						stack_value destructor = s.register_function(detail::delete_function<clean_function>);
+						s.set_element(any_local(meta_table.from_bottom()), "__gc", destructor);
 					}
-					return s.register_function_with_existing_upvalues(
-						detail::call_upvalue_function<clean_function>,
-						upvalue_count,
-						on_result
-					);
-				});
-			});
+					s.set_meta_table(any_local(data.from_bottom()), meta_table);
+				}
+				f_stored_handle.release();
+			}
+			int upvalue_count = 1;
+			for (;;)
+			{
+				auto value = Si::get(upvalues);
+				if (!value)
+				{
+					break;
+				}
+				push(*s.state(), *value);
+				++upvalue_count;
+			}
+			data.release();
+			return s.register_function_with_existing_upvalues(
+				detail::call_upvalue_function<clean_function>,
+				upvalue_count
+			);
 		}
 
-		template <class Function, class ResultHandler>
-		auto register_closure(stack &s, Function &&f, ResultHandler const &on_result)
+		template <class Function>
+		stack_value register_closure(stack &s, Function &&f)
 		{
-			return register_closure(s, std::forward<Function>(f), Si::empty_source<lua_Number>(), on_result);
+			return register_closure(s, std::forward<Function>(f), Si::empty_source<lua_Number>());
 		}
 
 		inline Si::empty_source<pushable *> no_arguments()
