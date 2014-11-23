@@ -12,7 +12,6 @@
 #include <silicium/noexcept_string.hpp>
 #include <silicium/fast_variant.hpp>
 #include <silicium/source/empty.hpp>
-#include <silicium/source/single_source.hpp>
 
 namespace lua
 {
@@ -295,6 +294,11 @@ namespace lua
 			{
 			}
 
+			lua_State *state() const BOOST_NOEXCEPT
+			{
+				return m_state.get();
+			}
+
 			template <class SuccessHandler>
 			auto load_buffer(Si::memory_range code, char const *name, SuccessHandler const &on_success)
 			{
@@ -358,6 +362,17 @@ namespace lua
 				return on_result(typed_local<type::function>(checked_top()));
 			}
 
+			template <class ResultHandler>
+			auto register_function_with_existing_upvalues(int (*function)(lua_State *L), int upvalue_count, ResultHandler const &on_result)
+			{
+				assert(checked_top() >= upvalue_count);
+				lua_pushcclosure(m_state.get(), function, upvalue_count);
+				int const top = checked_top();
+				assert(top >= 1);
+				detail::owner_of_the_top const owner(*m_state, 1);
+				return on_result(typed_local<type::function>(top));
+			}
+
 			template <class ResultHandler, class UpvalueSource>
 			auto register_function(int (*function)(lua_State *L), UpvalueSource &&values, ResultHandler const &on_result)
 			{
@@ -376,12 +391,7 @@ namespace lua
 					++upvalue_count;
 					assert(checked_top() == (initial_top + upvalue_count));
 				}
-				assert(checked_top() >= upvalue_count);
-				lua_pushcclosure(m_state.get(), function, upvalue_count);
-				int const top = checked_top();
-				assert(top >= 1);
-				detail::owner_of_the_top const owner(*m_state, 1);
-				return on_result(typed_local<type::function>(top));
+				return register_function_with_existing_upvalues(function, upvalue_count, on_result);
 			}
 
 			type get_type(any_local const &local)
@@ -512,8 +522,8 @@ namespace lua
 			};
 		}
 
-		template <class Function, class ResultHandler>
-		auto register_closure(stack &s, Function &&f, ResultHandler const &on_result)
+		template <class Function, class UpvalueSource, class ResultHandler>
+		auto register_closure(stack &s, Function &&f, UpvalueSource &&upvalues, ResultHandler const &on_result)
 		{
 			typedef typename std::decay<Function>::type clean_function;
 			return s.create_user_data(sizeof(f), [&](typed_local<type::user_data> data)
@@ -531,13 +541,31 @@ namespace lua
 					});
 					s.set_meta_table(data, meta_table);
 					f_stored_handle.release();
-					return s.register_function(
+					data.push(*s.state());
+					int upvalue_count = 1;
+					for (;;)
+					{
+						auto value = Si::get(upvalues);
+						if (!value)
+						{
+							break;
+						}
+						push(*s.state(), *value);
+						++upvalue_count;
+					}
+					return s.register_function_with_existing_upvalues(
 						detail::call_upvalue_function<clean_function>,
-						Si::make_single_source(data),
+						upvalue_count,
 						on_result
 					);
 				});
 			});
+		}
+
+		template <class Function, class ResultHandler>
+		auto register_closure(stack &s, Function &&f, ResultHandler const &on_result)
+		{
+			return register_closure(s, std::forward<Function>(f), Si::empty_source<lua_Number>(), on_result);
 		}
 
 		inline Si::empty_source<pushable *> no_arguments()

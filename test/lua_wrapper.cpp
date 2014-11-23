@@ -195,3 +195,33 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_cpp_closure)
 	}
 	BOOST_CHECK_EQUAL(1, bound.use_count());
 }
+
+BOOST_AUTO_TEST_CASE(lua_wrapper_register_cpp_closure_with_upvalues)
+{
+	auto bound = std::make_shared<lua_Number>(2);
+	{
+		auto state = lua::create_lua();
+		lua_State &L = *state;
+		lua::safe::stack s(std::move(state));
+		std::array<lua_Number, 1> const upvalues{{ 3.0 }};
+		boost::optional<lua_Number> const result = lua::safe::register_closure(
+			s,
+			[bound](lua_State *L)
+			{
+				lua_pushvalue(L, lua_upvalueindex(2));
+				return 1;
+			},
+			Si::make_container_source(upvalues),
+			[&](lua::safe::typed_local<lua::safe::type::function> closure)
+			{
+				return s.call(closure, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
+				{
+					return s.get_number(results[0]);
+				});
+			}
+		);
+		BOOST_CHECK_EQUAL(0, lua_gettop(&L));
+		BOOST_CHECK_EQUAL(boost::make_optional(upvalues[0]), result);
+	}
+	BOOST_CHECK_EQUAL(1, bound.use_count());
+}
