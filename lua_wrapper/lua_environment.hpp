@@ -449,9 +449,9 @@ namespace lua
 			}
 
 			template <class ResultHandler>
-			auto create_table(ResultHandler const &on_result)
+			auto create_table(ResultHandler const &on_result, int array_size = 0, int non_array_size = 0)
 			{
-				lua_createtable(m_state.get(), 0, 0);
+				lua_createtable(m_state.get(), array_size, non_array_size);
 				detail::owner_of_the_top const owner(*m_state, 1);
 				return on_result(typed_local<type::table>(lua_gettop(m_state.get())));
 			}
