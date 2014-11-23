@@ -36,9 +36,15 @@ namespace lua
 	{
 		enum class type
 		{
-			function,
-			number,
-			string
+			nil = LUA_TNIL,
+			boolean = LUA_TBOOLEAN,
+			light_user_data = LUA_TLIGHTUSERDATA,
+			number = LUA_TNUMBER,
+			string = LUA_TSTRING,
+			table = LUA_TTABLE,
+			function = LUA_TFUNCTION,
+			user_data = LUA_TUSERDATA,
+			thread = LUA_TTHREAD
 		};
 
 		struct pushable
@@ -46,8 +52,24 @@ namespace lua
 			virtual ~pushable()
 			{
 			}
-			virtual void push(lua_State &L) = 0;
+			virtual void push(lua_State &L) const = 0;
 		};
+
+		inline void push(lua_State &L, pushable const &p)
+		{
+			p.push(L);
+		}
+
+		inline void push(lua_State &L, pushable const *p)
+		{
+			assert(p);
+			push(L, *p);
+		}
+
+		inline void push(lua_State &L, lua_Number value)
+		{
+			lua_pushnumber(&L, value);
+		}
 
 		struct any_local : pushable
 		{
@@ -61,7 +83,7 @@ namespace lua
 				return m_from_bottom;
 			}
 
-			virtual void push(lua_State &L) SILICIUM_OVERRIDE
+			virtual void push(lua_State &L) const SILICIUM_OVERRIDE
 			{
 				lua_pushvalue(&L, m_from_bottom);
 			}
@@ -166,20 +188,20 @@ namespace lua
 				on_success(compiled);
 			}
 
-			template <class ArgumentSource, class ResultHandler>
-			void call(pushable &function, ArgumentSource &&arguments, boost::optional<int> expected_result_count, ResultHandler const &on_results)
+			template <class Pushable, class ArgumentSource, class ResultHandler>
+			void call(Pushable const &function, ArgumentSource &&arguments, boost::optional<int> expected_result_count, ResultHandler const &on_results)
 			{
 				int const stack_before = lua_gettop(m_state.get());
-				function.push(*m_state);
+				push(*m_state, function);
 				int argument_count = 0;
 				for (;;)
 				{
-					boost::optional<pushable *> argument = Si::get(arguments);
+					auto argument = Si::get(arguments);
 					if (!argument)
 					{
 						break;
 					}
-					(*argument)->push(*m_state);
+					push(*m_state, *argument);
 					++argument_count;
 				}
 				int const nresults = expected_result_count ? *expected_result_count : LUA_MULTRET;
@@ -195,9 +217,24 @@ namespace lua
 				on_results(results);
 			}
 
+			type get_type(any_local const &local)
+			{
+				return static_cast<type>(lua_type(m_state.get(), local.from_bottom()));
+			}
+
 			lua_Number to_number(any_local const &local)
 			{
 				return lua_tonumber(m_state.get(), local.from_bottom());
+			}
+
+			boost::optional<lua_Number> get_number(any_local const &local)
+			{
+				type const t = get_type(local);
+				if (t != type::number)
+				{
+					return boost::none;
+				}
+				return to_number(local);
 			}
 
 		private:
