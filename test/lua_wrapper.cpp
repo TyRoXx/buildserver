@@ -3,6 +3,7 @@
 #include <lauxlib.h>
 #include <boost/optional/optional_io.hpp>
 #include <silicium/source/memory_source.hpp>
+#include <silicium/source/single_source.hpp>
 
 BOOST_AUTO_TEST_CASE(lua_wrapper_create)
 {
@@ -133,4 +134,31 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_c_function)
 	});
 	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
 	BOOST_CHECK_EQUAL(boost::make_optional(3.0), result);
+}
+
+namespace
+{
+	int return_upvalues_subtracted(lua_State *L) BOOST_NOEXCEPT
+	{
+		lua_pushnumber(L, lua_tonumber(L, lua_upvalueindex(1)) - lua_tonumber(L, lua_upvalueindex(2)));
+		return 1;
+	}
+}
+
+BOOST_AUTO_TEST_CASE(lua_wrapper_register_c_closure)
+{
+	auto state = lua::create_lua();
+	lua_State &L = *state;
+	lua::safe::stack s(std::move(state));
+	boost::optional<lua_Number> result;
+	std::array<lua_Number, 2> const upvalues{{1.0, 2.0}};
+	s.register_function(return_upvalues_subtracted, Si::make_container_source(upvalues), [&](lua::safe::typed_local<lua::safe::type::function> func)
+	{
+		s.call(func, lua::safe::no_arguments(), 1, [&](lua::safe::array results)
+		{
+			result = s.get_number(results[0]);
+		});
+	});
+	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
+	BOOST_CHECK_EQUAL(boost::make_optional(-1.0), result);
 }

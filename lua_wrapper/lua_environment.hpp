@@ -286,8 +286,9 @@ namespace lua
 			template <class Pushable, class ArgumentSource, class ResultHandler>
 			void call(Pushable const &function, ArgumentSource &&arguments, boost::optional<int> expected_result_count, ResultHandler const &on_results)
 			{
-				int const stack_before = lua_gettop(m_state.get());
+				int const top_before = lua_gettop(m_state.get());
 				push(*m_state, function);
+				assert(lua_gettop(m_state.get()) == (top_before + 1));
 				int argument_count = 0;
 				for (;;)
 				{
@@ -299,6 +300,7 @@ namespace lua
 					push(*m_state, *argument);
 					++argument_count;
 				}
+				assert(lua_gettop(m_state.get()) == (top_before + 1 + argument_count));
 				int const nresults = expected_result_count ? *expected_result_count : LUA_MULTRET;
 				//TODO: stack trace in case of an error
 				if (lua_pcall(m_state.get(), argument_count, nresults, 0) != 0)
@@ -307,7 +309,9 @@ namespace lua
 					lua_pop(m_state.get(), 1);
 					boost::throw_exception(lua_exception(std::move(message)));
 				}
-				array const results(stack_before + 1, lua_gettop(m_state.get()) - stack_before);
+				int const top_after_call = lua_gettop(m_state.get());
+				assert(top_after_call >= top_before);
+				array const results(top_before + 1, top_after_call - top_before);
 				detail::owner_of_the_top const owner(*m_state, results.length());
 				on_results(results);
 			}
@@ -324,6 +328,25 @@ namespace lua
 			void register_function(int (*function)(lua_State *L), ResultHandler const &on_result)
 			{
 				lua_pushcfunction(m_state.get(), function);
+				detail::owner_of_the_top const owner(*m_state, 1);
+				on_result(typed_local<type::function>(lua_gettop(m_state.get())));
+			}
+
+			template <class ResultHandler, class UpvalueSource>
+			void register_function(int (*function)(lua_State *L), UpvalueSource &&values, ResultHandler const &on_result)
+			{
+				int upvalue_count = 0;
+				for (;;)
+				{
+					auto value = Si::get(values);
+					if (!value)
+					{
+						break;
+					}
+					push(*m_state, *value);
+					++upvalue_count;
+				}
+				lua_pushcclosure(m_state.get(), function, upvalue_count);
 				detail::owner_of_the_top const owner(*m_state, 1);
 				on_result(typed_local<type::function>(lua_gettop(m_state.get())));
 			}
