@@ -78,6 +78,11 @@ namespace lua
 			lua_pushlstring(&L, value.data(), value.size());
 		}
 
+		inline void push(lua_State &L, bool value)
+		{
+			lua_pushboolean(&L, value);
+		}
+
 		namespace detail
 		{
 			struct pusher
@@ -261,6 +266,11 @@ namespace lua
 				return lua_tostring(m_state.get(), local.from_bottom());
 			}
 
+			bool to_boolean(any_local const &local)
+			{
+				return lua_toboolean(m_state.get(), local.from_bottom());
+			}
+
 			boost::optional<lua_Number> get_number(any_local const &local)
 			{
 				type const t = get_type(local);
@@ -279,6 +289,16 @@ namespace lua
 					return boost::none;
 				}
 				return to_string(local);
+			}
+
+			boost::optional<bool> get_boolean(any_local const &local)
+			{
+				type const t = get_type(local);
+				if (t != type::boolean)
+				{
+					return boost::none;
+				}
+				return to_boolean(local);
 			}
 
 		private:
