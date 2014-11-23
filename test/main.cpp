@@ -47,6 +47,7 @@ BOOST_AUTO_TEST_CASE(cmake_exe_test)
 	std::string output;
 	auto stdout = Si::make_container_sink(output);
 	parameters.out = &stdout;
+	parameters.err = &stdout;
 	BOOST_CHECK_EQUAL(0, Si::run_process(parameters));
 	BOOST_CHECK_EQUAL("It works!\n", output);
 }

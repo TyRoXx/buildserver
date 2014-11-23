@@ -33,6 +33,9 @@ namespace buildserver
 		parameters.executable = m_exe;
 		parameters.current_path = build;
 		parameters.arguments = std::move(arguments);
+		Si::null_sink<char, void> output;
+		parameters.out = &output;
+		parameters.err = &output;
 		int const rc = Si::run_process(parameters);
 		if (rc != 0)
 		{
@@ -53,6 +56,9 @@ namespace buildserver
 		parameters.executable = m_exe;
 		parameters.current_path = build;
 		parameters.arguments = std::move(arguments);
+		Si::null_sink<char, void> output;
+		parameters.out = &output;
+		parameters.err = &output;
 		int const rc = Si::run_process(parameters);
 		if (rc != 0)
 		{
