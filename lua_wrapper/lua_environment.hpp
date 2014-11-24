@@ -12,6 +12,7 @@
 #include <silicium/noexcept_string.hpp>
 #include <silicium/fast_variant.hpp>
 #include <silicium/source/empty.hpp>
+#include <silicium/detail/integer_sequence.hpp>
 
 namespace lua
 {
@@ -649,6 +650,124 @@ namespace lua
 	stack_value register_closure(stack &s, Function &&f)
 	{
 		return register_closure(s, std::forward<Function>(f), Si::empty_source<lua_Number>());
+	}
+
+	template <class T>
+	struct from_lua;
+
+	template <>
+	struct from_lua<lua_Number>
+	{
+		lua_Number operator()(lua_State &L, int address) const
+		{
+			return lua_tonumber(&L, address);
+		}
+	};
+
+	template <>
+	struct from_lua<bool>
+	{
+		bool operator()(lua_State &L, int address) const
+		{
+			return lua_toboolean(&L, address);
+		}
+	};
+
+	template <>
+	struct from_lua<Si::noexcept_string>
+	{
+		Si::noexcept_string operator()(lua_State &L, int address) const
+		{
+			char const *raw = lua_tostring(&L, address);
+			if (!raw)
+			{
+				return Si::noexcept_string();
+			}
+			return raw;
+		}
+	};
+
+	template <>
+	struct from_lua<char const *>
+	{
+		char const *operator()(lua_State &L, int address) const
+		{
+			return lua_tostring(&L, address);
+		}
+	};
+
+	template <class T>
+	T from_lua_cast(lua_State &L, int address)
+	{
+		return from_lua<T>()(L, address);
+	}
+
+	namespace detail
+	{
+		template <class T>
+		struct argument_converter
+		{
+			T operator()(lua_State &L, int address) const
+			{
+				return from_lua_cast<T>(L, address);
+			}
+		};
+
+		template <class T>
+		struct argument_converter<T const &> : argument_converter<T>
+		{
+		};
+
+		template <class Function, class ...Parameters, std::size_t ...Indices>
+		auto call_with_converted_arguments(Function const &func, lua_State &L, ranges::v3::integer_sequence<Indices...>)
+		{
+			return func(argument_converter<Parameters>()(L, 1 + Indices)...);
+		}
+
+		template <class NonVoid>
+		struct caller
+		{
+			template <class F, class ...Arguments>
+			int operator()(lua_State &L, F const &f, Arguments &&...args) const
+			{
+				NonVoid result = f(std::forward<Arguments>(args)...);
+				lua_pop(&L, sizeof...(Arguments));
+				push(L, std::move(result));
+				return 1;
+			}
+		};
+
+		template <>
+		struct caller<void>
+		{
+			template <class F, class ...Arguments>
+			int operator()(lua_State &L, F const &f, Arguments &&...args) const
+			{
+				f(std::forward<Arguments>(args)...);
+				lua_pop(&L, sizeof...(Arguments));
+				return 0;
+			}
+		};
+
+		template <class F, class R, class ...Parameters>
+		stack_value register_any_function_helper(stack &s, F func, R (F::*)(Parameters...) const)
+		{
+			return register_closure(s, [func = std::move(func)](lua_State *L) -> int
+			{
+				return caller<R>()(*L, [&]()
+				{
+					return call_with_converted_arguments<F, Parameters...>(func, *L, typename ranges::v3::make_integer_sequence<sizeof...(Parameters)>::type());
+				});
+			});
+		}
+	}
+
+	template <class Function>
+	stack_value register_any_function(stack &s, Function &&f)
+	{
+		typedef typename std::decay<Function>::type clean_function;
+		auto call_operator = &clean_function::operator();
+		return detail::register_any_function_helper<clean_function>(s, std::forward<Function>(f), call_operator);
 	}
 
 	inline Si::empty_source<pushable *> no_arguments()
