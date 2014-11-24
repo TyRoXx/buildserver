@@ -87,7 +87,7 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_reference)
 	lua_State &L = *state;
 	lua::stack s(std::move(state));
 	std::string const code = "return 3";
-	lua::reference const ref = s.create_reference(s.load_buffer(Si::make_memory_range(code), "test"));
+	lua::reference const ref = lua::create_reference(L, s.load_buffer(Si::make_memory_range(code), "test"));
 	BOOST_CHECK_EQUAL(0, lua_gettop(&L));
 	BOOST_REQUIRE(!ref.empty());
 	{
@@ -214,13 +214,15 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_closure_with_converted_arguments_all_t
 				lua_Number const &nc,
 				Si::noexcept_string str,
 				Si::noexcept_string const &strc,
-				char const *c_str
+				char const *c_str,
+				lua::reference ref,
+				lua::reference const &refc
 			) -> Si::noexcept_string
 		{
 			//The three arguments should still be on the stack,
 			//for example for keeping c_str safe from the GC.
 			int stack_size = lua_gettop(s.state());
-			BOOST_REQUIRE_EQUAL(7, stack_size);
+			BOOST_REQUIRE_EQUAL(9, stack_size);
 
 			BOOST_CHECK_EQUAL(true, b);
 			BOOST_CHECK_EQUAL(false, bc);
@@ -230,6 +232,8 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_closure_with_converted_arguments_all_t
 			BOOST_CHECK_EQUAL("ABC", strc);
 			BOOST_REQUIRE(c_str);
 			BOOST_CHECK_EQUAL(Si::noexcept_string("def"), c_str);
+			BOOST_CHECK_EQUAL(-1.0, lua::from_lua_cast<lua_Number>(*s.state(), ref));
+			BOOST_CHECK_EQUAL(-2.0, lua::from_lua_cast<lua_Number>(*s.state(), refc));
 			return "it works";
 		});
 		std::vector<Si::fast_variant<bool, lua_Number, Si::noexcept_string>> const arguments
@@ -240,7 +244,9 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_closure_with_converted_arguments_all_t
 			6.0,
 			Si::noexcept_string("abc"),
 			Si::noexcept_string("ABC"),
-			Si::noexcept_string("def")
+			Si::noexcept_string("def"),
+			-1.0,
+			-2.0
 		};
 		lua::stack_value result = s.call(registered, Si::make_container_source(arguments), std::integral_constant<int, 1>());
 		boost::optional<Si::noexcept_string> str_result = s.get_string(lua::any_local(result.from_bottom()));

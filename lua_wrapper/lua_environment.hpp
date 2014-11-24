@@ -198,7 +198,7 @@ namespace lua
 		}
 	};
 
-	struct reference
+	struct reference : pushable
 	{
 		reference() BOOST_NOEXCEPT
 			: m_state(nullptr)
@@ -245,6 +245,12 @@ namespace lua
 			lua_rawgeti(m_state, LUA_REGISTRYINDEX, m_key);
 		}
 
+		virtual void push(lua_State &L) const SILICIUM_OVERRIDE
+		{
+			assert(&L == m_state);
+			push();
+		}
+
 	private:
 
 		lua_State *m_state;
@@ -257,6 +263,14 @@ namespace lua
 	inline void push(lua_State &, reference const &ref) BOOST_NOEXCEPT
 	{
 		ref.push();
+	}
+
+	template <class Pushable>
+	reference create_reference(lua_State &L, Pushable const &value)
+	{
+		push(L, value);
+		int key = luaL_ref(&L, LUA_REGISTRYINDEX);
+		return reference(L, key);
 	}
 
 	struct lua_exception : std::runtime_error
@@ -439,14 +453,6 @@ namespace lua
 			int where = results.from_bottom();
 			results.release();
 			return stack_value(*m_state, where);
-		}
-
-		template <class Pushable>
-		reference create_reference(Pushable const &value)
-		{
-			push(*m_state, value);
-			int key = luaL_ref(m_state.get(), LUA_REGISTRYINDEX);
-			return reference(*m_state, key);
 		}
 
 		stack_value register_function(int (*function)(lua_State *L))
@@ -696,10 +702,27 @@ namespace lua
 		}
 	};
 
+	template <>
+	struct from_lua<reference>
+	{
+		reference operator()(lua_State &L, int address) const
+		{
+			return create_reference(L, any_local(address));
+		}
+	};
+
 	template <class T>
 	T from_lua_cast(lua_State &L, int address)
 	{
 		return from_lua<T>()(L, address);
+	}
+
+	template <class T>
+	T from_lua_cast(lua_State &L, reference const &ref)
+	{
+		ref.push();
+		stack_value pushed(L, lua_gettop(&L));
+		return from_lua<T>()(L, pushed.from_bottom());
 	}
 
 	namespace detail
