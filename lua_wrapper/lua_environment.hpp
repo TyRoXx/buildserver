@@ -718,8 +718,8 @@ namespace lua
 		{
 		};
 
-		template <class Function, class ...Parameters, std::size_t ...Indices>
-		auto call_with_converted_arguments(Function const &func, lua_State &L, ranges::v3::integer_sequence<Indices...>)
+		template <class ...Parameters, std::size_t ...Indices, class Function>
+		auto call_with_converted_arguments(Function &func, lua_State &L, ranges::v3::integer_sequence<Indices...>)
 		{
 			return func(argument_converter<Parameters>()(L, 1 + Indices)...);
 		}
@@ -756,7 +756,19 @@ namespace lua
 			{
 				return caller<R>()(*L, [&]()
 				{
-					return call_with_converted_arguments<F, Parameters...>(func, *L, typename ranges::v3::make_integer_sequence<sizeof...(Parameters)>::type());
+					return call_with_converted_arguments<Parameters...>(func, *L, typename ranges::v3::make_integer_sequence<sizeof...(Parameters)>::type());
+				});
+			});
+		}
+
+		template <class F, class R, class ...Parameters>
+		stack_value register_any_function_helper(stack &s, F func, R (F::*)(Parameters...))
+		{
+			return register_closure(s, [func = std::move(func)](lua_State *L) mutable -> int
+			{
+				return caller<R>()(*L, [&]()
+				{
+					return call_with_converted_arguments<Parameters...>(func, *L, typename ranges::v3::make_integer_sequence<sizeof...(Parameters)>::type());
 				});
 			});
 		}

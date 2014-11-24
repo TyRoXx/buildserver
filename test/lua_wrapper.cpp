@@ -254,3 +254,22 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_closure_with_converted_arguments_no_ar
 		BOOST_CHECK(called);
 	});
 }
+
+BOOST_AUTO_TEST_CASE(lua_wrapper_register_closure_with_converted_arguments_mutable)
+{
+	test_with_environment([](lua::stack &s, resource bound)
+	{
+		bool called = false;
+		lua::stack_value registered = lua::register_any_function(
+			s,
+			[&s, bound, &called]() mutable
+		{
+			int stack_size = lua_gettop(s.state());
+			BOOST_REQUIRE_EQUAL(0, stack_size);
+			called = true;
+		});
+		lua::stack_value result = s.call(registered, lua::no_arguments(), std::integral_constant<int, 1>());
+		BOOST_CHECK_EQUAL(lua::type::nil, s.get_type(lua::any_local(result.from_bottom())));
+		BOOST_CHECK(called);
+	});
+}
