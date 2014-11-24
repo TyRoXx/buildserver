@@ -198,7 +198,7 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_cpp_closure_with_upvalues)
 	BOOST_CHECK_EQUAL(1, bound.use_count());
 }
 
-BOOST_AUTO_TEST_CASE(lua_wrapper_register_arbitrary_function)
+BOOST_AUTO_TEST_CASE(lua_wrapper_register_closure_with_converted_arguments)
 {
 	auto bound = std::make_shared<lua_Number>(2);
 	{
@@ -234,6 +234,32 @@ BOOST_AUTO_TEST_CASE(lua_wrapper_register_arbitrary_function)
 			lua::stack_value result = s.call(registered, Si::make_container_source(arguments), std::integral_constant<int, 1>());
 			boost::optional<Si::noexcept_string> str_result = s.get_string(lua::any_local(result.from_bottom()));
 			BOOST_CHECK_EQUAL(boost::make_optional(Si::noexcept_string("it works")), str_result);
+		}
+		BOOST_CHECK_EQUAL(0, lua_gettop(&L));
+	}
+	BOOST_CHECK_EQUAL(1, bound.use_count());
+}
+
+BOOST_AUTO_TEST_CASE(lua_wrapper_register_closure_with_converted_arguments_no_arguments)
+{
+	auto bound = std::make_shared<lua_Number>(2);
+	{
+		auto state = lua::create_lua();
+		lua_State &L = *state;
+		lua::stack s(std::move(state));
+		{
+			bool called = false;
+			lua::stack_value registered = lua::register_any_function(
+				s,
+				[&L, bound, &called]()
+			{
+				int stack_size = lua_gettop(&L);
+				BOOST_REQUIRE_EQUAL(0, stack_size);
+				called = true;
+			});
+			lua::stack_value result = s.call(registered, lua::no_arguments(), std::integral_constant<int, 1>());
+			BOOST_CHECK_EQUAL(lua::type::nil, s.get_type(lua::any_local(result.from_bottom())));
+			BOOST_CHECK(called);
 		}
 		BOOST_CHECK_EQUAL(0, lua_gettop(&L));
 	}
