@@ -1,8 +1,11 @@
 #ifndef BUILDSERVER_LUA_ENVIRONMENT_HPP
 #define BUILDSERVER_LUA_ENVIRONMENT_HPP
 
+extern "C"
+{
 #include <lua.h>
 #include <lauxlib.h>
+}
 #include <boost/config.hpp>
 #include <boost/system/system_error.hpp>
 #include <memory>
@@ -775,9 +778,19 @@ namespace lua
 		template <class F, class R, class ...Parameters>
 		stack_value register_any_function_helper(stack &s, F func, R (F::*)(Parameters...) const)
 		{
-			return register_closure(s, [func = std::move(func)](lua_State *L) -> int
+			return register_closure(s, [func
+#ifndef _MSC_VER
+				= std::move(func)
+#endif
+			](lua_State *L) -> int
 			{
-				return caller<R>()(*L, [&]()
+				return caller<R>()(*L, [
+#ifdef _MSC_VER
+					func, L
+#else
+				&
+#endif
+				]()
 				{
 					return call_with_converted_arguments<Parameters...>(func, *L, typename ranges::v3::make_integer_sequence<sizeof...(Parameters)>::type());
 				});
@@ -787,7 +800,11 @@ namespace lua
 		template <class F, class R, class ...Parameters>
 		stack_value register_any_function_helper(stack &s, F func, R (F::*)(Parameters...))
 		{
-			return register_closure(s, [func = std::move(func)](lua_State *L) mutable -> int
+			return register_closure(s, [func
+#ifndef _MSC_VER
+				= std::move(func)
+#endif
+			](lua_State *L) mutable -> int
 			{
 				return caller<R>()(*L, [&]()
 				{
