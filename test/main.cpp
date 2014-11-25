@@ -38,16 +38,16 @@ BOOST_AUTO_TEST_CASE(cmake_exe_test)
 	boost::filesystem::remove_all(build_path);
 	boost::filesystem::create_directories(build_path);
 	boost::filesystem::path const resources_path = boost::filesystem::path(__FILE__).parent_path().parent_path() / "test-resources";
-	cmake_driver.generate(resources_path / "test1", build_path, {});
+	cmake_driver.generate(resources_path / "test1", build_path, boost::unordered_map<std::string, std::string>());
 	cmake_driver.build(build_path, boost::thread::hardware_concurrency());
 	boost::filesystem::path const built_exe = build_path / "test1";
 	Si::process_parameters parameters;
 	parameters.executable = built_exe;
 	parameters.current_path = build_path;
 	std::string output;
-	auto stdout = Si::make_container_sink(output);
-	parameters.out = &stdout;
-	parameters.err = &stdout;
+	auto stdout_ = Si::make_container_sink(output);
+	parameters.out = &stdout_;
+	parameters.err = &stdout_;
 	BOOST_CHECK_EQUAL(0, Si::run_process(parameters));
 	BOOST_CHECK_EQUAL("It works!\n", output);
 }

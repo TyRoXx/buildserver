@@ -358,9 +358,9 @@ namespace lua
 			return m_address;
 		}
 
-		type get_type() const BOOST_NOEXCEPT
+		lua::type get_type() const BOOST_NOEXCEPT
 		{
-			return static_cast<type>(lua_type(m_state, m_address));
+			return static_cast<lua::type>(lua_type(m_state, m_address));
 		}
 
 	private:
