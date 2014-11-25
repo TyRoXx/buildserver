@@ -6,7 +6,7 @@
 
 namespace buildserver
 {
-	Si::error_or<boost::optional<boost::filesystem::path>> find_cmake_unix();
+	Si::error_or<boost::optional<boost::filesystem::path>> find_cmake();
 }
 
 #endif

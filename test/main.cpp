@@ -31,10 +31,10 @@ BOOST_AUTO_TEST_CASE(find_executable_unix_test)
 
 BOOST_AUTO_TEST_CASE(cmake_exe_test)
 {
-	auto cmake = buildserver::find_cmake_unix().get();
+	auto cmake = buildserver::find_cmake().get();
 	BOOST_REQUIRE(cmake);
 	buildserver::cmake_exe const cmake_driver(*cmake);
-	boost::filesystem::path const build_path = "/tmp/buildtest123456";
+	boost::filesystem::path const build_path = boost::filesystem::temp_directory_path() / "buildtest123456";
 	boost::filesystem::remove_all(build_path);
 	boost::filesystem::create_directories(build_path);
 	boost::filesystem::path const resources_path = boost::filesystem::path(__FILE__).parent_path().parent_path() / "test-resources";

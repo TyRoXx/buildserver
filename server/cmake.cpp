@@ -1,5 +1,6 @@
 #include "cmake.hpp"
 #include <silicium/process.hpp>
+#include <silicium/sink/iterator_sink.hpp>
 #include <boost/lexical_cast.hpp>
 
 namespace buildserver
@@ -49,16 +50,20 @@ namespace buildserver
 		unsigned cpu_parallelism
 	) const
 	{
-		//assuming make..
-		std::vector<std::string> arguments{"--build", ".", "--", "-j"};
-		arguments.emplace_back(boost::lexical_cast<std::string>(cpu_parallelism));
+		std::vector<std::string> arguments{"--build", "."
+#ifndef _WIN32
+			//assuming make..
+			, "--", "-j", boost::lexical_cast<std::string>(cpu_parallelism)
+#endif
+		};
 		Si::process_parameters parameters;
 		parameters.executable = m_exe;
 		parameters.current_path = build;
 		parameters.arguments = std::move(arguments);
-		Si::null_sink<char, void> output;
-		parameters.out = &output;
-		parameters.err = &output;
+		std::string output;
+		auto output_sink = Si::make_container_sink(output);
+		parameters.out = &output_sink;
+		parameters.err = &output_sink;
 		int const rc = Si::run_process(parameters);
 		if (rc != 0)
 		{
