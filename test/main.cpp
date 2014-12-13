@@ -5,8 +5,8 @@
 #include "server/find_executable.hpp"
 #include "server/find_gcc.hpp"
 #include <silicium/error_or.hpp>
-#include <silicium/override.hpp>
 #include <silicium/process.hpp>
+#include <silicium/sink/virtualized_sink.hpp>
 #include <silicium/sink/iterator_sink.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/filesystem/operations.hpp>
@@ -45,7 +45,7 @@ BOOST_AUTO_TEST_CASE(cmake_exe_test)
 	parameters.executable = built_exe;
 	parameters.current_path = build_path;
 	std::string output;
-	auto stdout_ = Si::make_container_sink(output);
+	auto stdout_ = Si::virtualize_sink(Si::make_container_sink(output));
 	parameters.out = &stdout_;
 	parameters.err = &stdout_;
 	BOOST_CHECK_EQUAL(0, Si::run_process(parameters));

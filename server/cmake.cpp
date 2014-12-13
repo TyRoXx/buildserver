@@ -1,6 +1,7 @@
 #include "cmake.hpp"
 #include <silicium/process.hpp>
 #include <silicium/sink/iterator_sink.hpp>
+#include <silicium/sink/virtualized_sink.hpp>
 #include <boost/lexical_cast.hpp>
 
 namespace buildserver
@@ -34,7 +35,7 @@ namespace buildserver
 		parameters.executable = m_exe;
 		parameters.current_path = build;
 		parameters.arguments = std::move(arguments);
-		Si::null_sink<char, void> output;
+		auto output = Si::virtualize_sink(Si::null_sink<char, Si::success>());
 		parameters.out = &output;
 		parameters.err = &output;
 		int const rc = Si::run_process(parameters);
@@ -61,7 +62,7 @@ namespace buildserver
 		parameters.current_path = build;
 		parameters.arguments = std::move(arguments);
 		std::string output;
-		auto output_sink = Si::make_container_sink(output);
+		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
 		parameters.out = &output_sink;
 		parameters.err = &output_sink;
 		int const rc = Si::run_process(parameters);

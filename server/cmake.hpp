@@ -3,7 +3,7 @@
 
 #include <boost/unordered_map.hpp>
 #include <boost/filesystem/path.hpp>
-#include <silicium/override.hpp>
+#include <silicium/config.hpp>
 
 namespace buildserver
 {
