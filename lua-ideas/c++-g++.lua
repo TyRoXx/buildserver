@@ -10,4 +10,4 @@ return ci:implement_package(
 			cxx = gcc.gxx
 		}
 	end
-}
+)

@@ -17,4 +17,4 @@ return ci:implement_package(
 			cxx = cl
 		}
 	end
-}
+)

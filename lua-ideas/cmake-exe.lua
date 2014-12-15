@@ -35,4 +35,4 @@ return ci:implement_package(
 		end
 		return cmake
 	end
-}
+)
