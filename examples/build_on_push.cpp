@@ -144,7 +144,7 @@ namespace
 
 		boost::program_options::options_description desc("Allowed options");
 		desc.add_options()
-		    ("help", "produce help message")
+			("help", "produce help message")
 			("repository,r", boost::program_options::value(&result.repository), "the URI for git cloning the code")
 			("port,p", boost::program_options::value(&result.port), "port to listen on for POSTed push notifications")
 			("secret,s", boost::program_options::value(&result.secret), "a string that needs to be in the query for the notification to be accepted")
