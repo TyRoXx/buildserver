@@ -46,10 +46,13 @@ endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
 find_package(Silicium REQUIRED)
-include_directories(SYSTEM ${SILICIUM_INCLUDE_DIR})
+include_directories(${SILICIUM_INCLUDE_DIR})
+
+find_package(LuaCpp REQUIRED)
+include_directories(${LUACPP_INCLUDE_DIRS})
 
 find_package(Lua51 REQUIRED)
-include_directories(SYSTEM ${LUA_INCLUDE_DIR})
+include_directories(${LUA_INCLUDE_DIR})
 
 include_directories(".")
 add_subdirectory("server")

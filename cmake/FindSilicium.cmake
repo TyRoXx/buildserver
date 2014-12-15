@@ -5,7 +5,7 @@
 
 find_path(SILICIUM_INCLUDE_DIR "silicium/version.hpp" HINTS "/usr/local/include" "/usr/include")
 
-set(SILICIUM_INCLUDE_DIRS ${SILICIUM_INCLUDE_DIR} ${REACTIVE_INCLUDE_DIR})
+set(SILICIUM_INCLUDE_DIRS ${SILICIUM_INCLUDE_DIR})
 
 include(FindPackageHandleStandardArgs)
 # handle the QUIETLY and REQUIRED arguments and set LIBSILICIUM_FOUND to TRUE
