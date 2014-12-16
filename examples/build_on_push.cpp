@@ -10,6 +10,10 @@
 #include <silicium/http/generate_response.hpp>
 #include <silicium/observable/total_consumer.hpp>
 
+namespace Si
+{
+}
+
 namespace
 {
 	template <class AsyncWriteStream, class YieldContext, class Status, class StatusText>
@@ -64,7 +68,7 @@ namespace
 		{
 		}
 
-		void async_get_one(Si::observer<element_type> &observer)
+		void async_get_one(Si::ptr_observer<Si::observer<element_type>> observer)
 		{
 			if (!m_is_running)
 			{
@@ -73,12 +77,12 @@ namespace
 			}
 			return Si::visit<void>(
 				m_observer_or_notification,
-				[this, &observer](Si::observer<element_type> * &my_observer)
+				[this, observer](Si::observer<element_type> * &my_observer)
 				{
 					assert(!my_observer);
-					my_observer = &observer;
+					my_observer = observer.get();
 				},
-				[this, &observer](notification)
+				[this, observer](notification)
 				{
 					m_observer_or_notification = static_cast<Si::observer<element_type> *>(nullptr);
 					observer.got_element(notification());
