@@ -4,8 +4,7 @@
 #include <silicium/http/receive_request.hpp>
 #include <silicium/asio/tcp_acceptor.hpp>
 #include <silicium/asio/writing_observable.hpp>
-#include <silicium/observable/flatten.hpp>
-#include <silicium/observable/coroutine.hpp>
+#include <silicium/observable/spawn_coroutine.hpp>
 #include <silicium/sink/iterator_sink.hpp>
 #include <silicium/http/generate_response.hpp>
 #include <silicium/observable/total_consumer.hpp>
@@ -46,20 +45,17 @@ namespace
 		notification_server(boost::asio::io_service &io, boost::asio::ip::tcp::endpoint endpoint, Si::noexcept_string secret)
 			: m_server(
 				Si::erase_unique(
-					Si::flatten(
-						Si::transform(
-							Si::asio::make_tcp_acceptor(Si::make_unique<boost::asio::ip::tcp::acceptor>(io, endpoint)),
-							[this](Si::asio::tcp_acceptor_result maybe_client)
+					Si::transform(
+						Si::asio::make_tcp_acceptor(Si::make_unique<boost::asio::ip::tcp::acceptor>(io, endpoint)),
+						[this](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
+						{
+							auto client = maybe_client.get();
+							Si::spawn_coroutine([this, client](Si::spawn_context yield)
 							{
-								auto client = maybe_client.get();
-								auto client_handler = Si::make_coroutine([this, client](Si::yield_context yield) -> Si::nothing
-								{
-									serve_client(*client, yield);
-									return {};
-								});
-								return Si::erase_unique(std::move(client_handler));
-							}
-						)
+								serve_client(*client, yield);
+							});
+							return{};
+						}
 					)
 				)
 			)
@@ -97,7 +93,8 @@ namespace
 		Si::noexcept_string m_secret;
 		Si::fast_variant<Si::observer<element_type> *, notification> m_observer_or_notification;
 
-		void serve_client(boost::asio::ip::tcp::socket &client, Si::yield_context yield)
+		template <class YieldContext>
+		void serve_client(boost::asio::ip::tcp::socket &client, YieldContext &&yield)
 		{
 			Si::error_or<boost::optional<Si::http::request>> maybe_request = Si::http::receive_request(client, yield);
 			if (maybe_request.is_error())
