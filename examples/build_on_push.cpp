@@ -142,6 +142,7 @@ namespace
 	boost::optional<options> parse_options(int argc, char **argv)
 	{
 		options result;
+		result.port = 8080;
 
 		boost::program_options::options_description desc("Allowed options");
 		desc.add_options()
@@ -173,6 +174,13 @@ namespace
 		if (vm.count("help"))
 		{
 		    std::cerr << desc << "\n";
+			return boost::none;
+		}
+
+		if (result.repository.empty())
+		{
+			std::cerr << "Missing option value --repository\n";
+			std::cerr << desc << "\n";
 			return boost::none;
 		}
 
