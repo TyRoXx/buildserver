@@ -9,7 +9,7 @@
 #include <silicium/sink/iterator_sink.hpp>
 #include <silicium/http/generate_response.hpp>
 #include <silicium/observable/total_consumer.hpp>
-#include <silicium/process.hpp>
+#include <silicium/run_process.hpp>
 #include "server/find_cmake.hpp"
 #include "server/find_gcc.hpp"
 #include "server/find_executable.hpp"

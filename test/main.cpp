@@ -5,7 +5,7 @@
 #include "server/find_executable.hpp"
 #include "server/find_gcc.hpp"
 #include <silicium/error_or.hpp>
-#include <silicium/process.hpp>
+#include <silicium/run_process.hpp>
 #include <silicium/sink/virtualized_sink.hpp>
 #include <silicium/sink/iterator_sink.hpp>
 #include <boost/optional/optional_io.hpp>
