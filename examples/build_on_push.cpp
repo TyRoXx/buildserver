@@ -46,7 +46,7 @@ namespace
 			: m_server(
 				Si::erase_unique(
 					Si::transform(
-						Si::asio::make_tcp_acceptor(Si::make_unique<boost::asio::ip::tcp::acceptor>(io, endpoint)),
+						Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(io, endpoint)),
 						[this](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
 						{
 							auto client = maybe_client.get();
