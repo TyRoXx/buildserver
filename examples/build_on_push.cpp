@@ -43,6 +43,7 @@ namespace
 	{
 	};
 
+	template <class Observer>
 	struct notification_server
 	{
 		typedef notification element_type;
@@ -69,7 +70,7 @@ namespace
 		{
 		}
 
-		void async_get_one(Si::ptr_observer<Si::observer<element_type>> observer)
+		void async_get_one(Observer observer)
 		{
 			if (!m_is_running)
 			{
@@ -78,15 +79,15 @@ namespace
 			}
 			return Si::visit<void>(
 				m_observer_or_notification,
-				[this, observer](Si::observer<element_type> * &my_observer)
+				[this, &observer](Observer &my_observer) mutable
 				{
-					assert(!my_observer);
-					my_observer = observer.get();
+					assert(!my_observer.get());
+					my_observer = std::move(observer);
 				},
-				[this, observer](notification)
+				[this, &observer](notification)
 				{
-					m_observer_or_notification = static_cast<Si::observer<element_type> *>(nullptr);
-					observer.got_element(notification());
+					m_observer_or_notification = Observer();
+					std::move(observer).got_element(notification());
 				}
 			);
 		}
@@ -96,7 +97,7 @@ namespace
 		Si::total_consumer<Si::unique_observable<Si::nothing>> m_server;
 		bool m_is_running;
 		Si::noexcept_string m_secret;
-		Si::fast_variant<Si::observer<element_type> *, notification> m_observer_or_notification;
+		Si::fast_variant<Observer, notification> m_observer_or_notification;
 
 		template <class YieldContext>
 		void serve_client(boost::asio::ip::tcp::socket &client, YieldContext &&yield)
@@ -122,9 +123,9 @@ namespace
 
 			Si::visit<void>(
 				m_observer_or_notification,
-				[](Si::observer<element_type> * &observer)
+				[](Observer &observer)
 				{
-					Si::exchange(observer, nullptr)->got_element(notification());
+					Si::exchange(observer, Observer()).got_element(notification());
 				},
 				[](notification const &)
 				{
@@ -260,15 +261,21 @@ namespace Si
 
 		explicit thread_observable2(std::function<element_type ()> action)
 			: m_action(std::move(action))
+			, m_has_finished(false)
 		{
 		}
 
 		template <class Observer>
 		void async_get_one(Observer &&observer)
 		{
+			if (m_has_finished)
+			{
+				return std::forward<Observer>(observer).ended();
+			}
 			assert(m_action);
 			auto action = std::move(m_action);
 			m_worker = ThreadingAPI::launch_async([
+				this,
 				observer
 #if SILICIUM_COMPILER_HAS_EXTENDED_CAPTURE
 					= std::forward<Observer>(observer)
@@ -280,6 +287,7 @@ namespace Si
 #endif
 				]() mutable
 			{
+				m_has_finished = true;
 				std::forward<Observer>(observer).got_element(action());
 			});
 		}
@@ -288,6 +296,7 @@ namespace Si
 
 		std::function<element_type ()> m_action;
 		typename ThreadingAPI::template future<void>::type m_worker;
+		bool m_has_finished;
 	};
 
 	template <class ThreadingAPI, class Action>
@@ -359,7 +368,7 @@ int main(int argc, char **argv)
 	boost::filesystem::path const &workspace = boost::filesystem::current_path();
 
 	boost::asio::io_service io;
-	notification_server notifications(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port), parsed_options->secret);
+	notification_server<Si::ptr_observer<Si::observer<notification>>> notifications(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port), parsed_options->secret);
 	auto all_done = Si::make_total_consumer(
 		Si::transform(
 			Si::ref(notifications),
