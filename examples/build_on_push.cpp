@@ -6,10 +6,13 @@
 #include <silicium/asio/tcp_acceptor.hpp>
 #include <silicium/asio/writing_observable.hpp>
 #include <silicium/observable/spawn_coroutine.hpp>
+#include <silicium/observable/spawn_observable.hpp>
 #include <silicium/sink/iterator_sink.hpp>
 #include <silicium/http/generate_response.hpp>
 #include <silicium/observable/total_consumer.hpp>
+#include <silicium/boost_threading.hpp>
 #include <silicium/run_process.hpp>
+#include <functional>
 #include "server/find_cmake.hpp"
 #include "server/find_gcc.hpp"
 #include "server/find_executable.hpp"
@@ -248,6 +251,102 @@ namespace
 	}
 }
 
+namespace Si
+{
+	template <class Element, class ThreadingAPI>
+	struct thread_observable2
+	{
+		typedef Element element_type;
+
+		explicit thread_observable2(std::function<element_type ()> action)
+			: m_action(std::move(action))
+		{
+		}
+
+		template <class Observer>
+		void async_get_one(Observer &&observer)
+		{
+			assert(m_action);
+			auto action = std::move(m_action);
+			m_worker = ThreadingAPI::launch_async([
+				observer
+#if SILICIUM_COMPILER_HAS_EXTENDED_CAPTURE
+					= std::forward<Observer>(observer)
+#endif
+				,
+				action
+#if SILICIUM_COMPILER_HAS_EXTENDED_CAPTURE
+					= std::move(action)
+#endif
+				]() mutable
+			{
+				std::forward<Observer>(observer).got_element(action());
+			});
+		}
+
+	private:
+
+		std::function<element_type ()> m_action;
+		typename ThreadingAPI::template future<void>::type m_worker;
+	};
+
+	template <class ThreadingAPI, class Action>
+	auto make_thread_observable2(Action &&action)
+	{
+		return thread_observable2<decltype(action()), ThreadingAPI>(std::forward<Action>(action));
+	}
+
+	template <class Next>
+	struct posting_observable : private observer<typename Next::element_type>
+	{
+		typedef typename Next::element_type element_type;
+
+		explicit posting_observable(boost::asio::io_service &io, Next next)
+			: m_io(&io)
+			, m_observer(nullptr)
+			, m_next(std::move(next))
+		{
+		}
+
+		template <class Observer>
+		void async_get_one(Observer &&observer_)
+		{
+			m_observer = observer_.get();
+			m_next.async_get_one(extend(std::forward<Observer>(observer_), observe_by_ref(static_cast<observer<element_type> &>(*this))));
+		}
+
+	private:
+
+		boost::asio::io_service *m_io;
+		observer<element_type> *m_observer;
+		Next m_next;
+
+		virtual void got_element(element_type value) SILICIUM_OVERRIDE
+		{
+			auto observer_ = Si::exchange(m_observer, nullptr);
+			m_io->post([observer_, value = std::move(value)]() mutable
+			{
+				observer_->got_element(std::move(value));
+			});
+		}
+
+		virtual void ended() SILICIUM_OVERRIDE
+		{
+			auto observer_ = Si::exchange(m_observer, nullptr);
+			m_io->post([observer_]() mutable
+			{
+				observer_->ended();
+			});
+		}
+	};
+
+	template <class Next>
+	auto make_posting_observable(boost::asio::io_service &io, Next &&next)
+	{
+		return posting_observable<typename std::decay<Next>::type>(io, std::forward<Next>(next));
+	}
+}
+
 int main(int argc, char **argv)
 {
 	auto parsed_options = parse_options(argc, argv);
@@ -270,24 +369,37 @@ int main(int argc, char **argv)
 				std::cerr << "Received a notification\n";
 				try
 				{
-					boost::filesystem::remove_all(workspace);
-					boost::filesystem::create_directories(workspace);
+					Si::spawn_observable(
+						Si::transform(
+							Si::make_posting_observable(
+								io,
+								Si::make_thread_observable2<Si::boost_threading>([&]()
+								{
+									boost::filesystem::remove_all(workspace);
+									boost::filesystem::create_directories(workspace);
+									return build(parsed_options->repository, workspace);
+								})
+							),
+							[](build_result result)
+							{
+								switch (result)
+								{
+								case build_result::success:
+									std::cerr << "Build success\n";
+									break;
 
-					//TODO: make the build async
-					switch (build(parsed_options->repository, workspace))
-					{
-					case build_result::success:
-						std::cerr << "Build success\n";
-						break;
+								case build_result::failure:
+									std::cerr << "Build failure\n";
+									break;
 
-					case build_result::failure:
-						std::cerr << "Build failure\n";
-						break;
-
-					case build_result::missing_dependency:
-						std::cerr << "Build dependency missing\n";
-						break;
-					}
+								case build_result::missing_dependency:
+									std::cerr << "Build dependency missing\n";
+									break;
+								}
+								return Si::nothing();
+							}
+						)
+					);
 				}
 				catch (std::exception const &ex)
 				{
