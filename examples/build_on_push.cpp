@@ -105,14 +105,12 @@ namespace
 
 			if (!maybe_request.get())
 			{
-				std::cerr << client.remote_endpoint().address() << ": invalid request\n";
 				return;
 			}
 
 			Si::http::request const &request = *maybe_request.get();
 			if (std::string::npos == request.path.find(m_secret))
 			{
-				std::cerr << client.remote_endpoint().address() << ": wrong secret\n";
 				quick_final_response(client, yield, "403", "Forbidden", "the path does not contain the correct secret");
 				return;
 			}
@@ -198,7 +196,17 @@ int main(int argc, char **argv)
 
 	boost::asio::io_service io;
 	notification_server notifications(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port), parsed_options->secret);
-	auto all_done = Si::make_total_consumer(Si::ref(notifications));
+	auto all_done = Si::make_total_consumer(
+		Si::transform(
+			Si::ref(notifications),
+			[](boost::optional<notification> element)
+			{
+				assert(element);
+				std::cerr << "Received a notification\n";
+				return Si::nothing();
+			}
+		)
+	);
 	all_done.start();
 	io.run();
 }
