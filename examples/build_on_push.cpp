@@ -8,6 +8,7 @@
 #include <silicium/asio/posting_observable.hpp>
 #include <silicium/observable/spawn_coroutine.hpp>
 #include <silicium/observable/spawn_observable.hpp>
+#include <silicium/observable/thread.hpp>
 #include <silicium/sink/iterator_sink.hpp>
 #include <silicium/http/generate_response.hpp>
 #include <silicium/observable/total_consumer.hpp>
@@ -253,60 +254,6 @@ namespace
 	}
 }
 
-namespace Si
-{
-	template <class Element, class ThreadingAPI>
-	struct thread_observable2
-	{
-		typedef Element element_type;
-
-		explicit thread_observable2(std::function<element_type ()> action)
-			: m_action(std::move(action))
-			, m_has_finished(false)
-		{
-		}
-
-		template <class Observer>
-		void async_get_one(Observer &&observer)
-		{
-			if (m_has_finished)
-			{
-				return std::forward<Observer>(observer).ended();
-			}
-			assert(m_action);
-			auto action = std::move(m_action);
-			m_worker = ThreadingAPI::launch_async([
-				this,
-				observer
-#if SILICIUM_COMPILER_HAS_EXTENDED_CAPTURE
-					= std::forward<Observer>(observer)
-#endif
-				,
-				action
-#if SILICIUM_COMPILER_HAS_EXTENDED_CAPTURE
-					= std::move(action)
-#endif
-				]() mutable
-			{
-				m_has_finished = true;
-				std::forward<Observer>(observer).got_element(action());
-			});
-		}
-
-	private:
-
-		std::function<element_type ()> m_action;
-		typename ThreadingAPI::template future<void>::type m_worker;
-		bool m_has_finished;
-	};
-
-	template <class ThreadingAPI, class Action>
-	auto make_thread_observable2(Action &&action)
-	{
-		return thread_observable2<decltype(action()), ThreadingAPI>(std::forward<Action>(action));
-	}
-}
-
 int main(int argc, char **argv)
 {
 	auto parsed_options = parse_options(argc, argv);
@@ -333,7 +280,7 @@ int main(int argc, char **argv)
 						Si::transform(
 							Si::asio::make_posting_observable(
 								io,
-								Si::make_thread_observable2<Si::boost_threading>([&]()
+								Si::make_thread_observable<Si::boost_threading>([&]()
 								{
 									boost::filesystem::remove_all(workspace);
 									boost::filesystem::create_directories(workspace);
