@@ -1,3 +1,6 @@
 [submodule "dependencies/silicium"]
 	path = dependencies/silicium
 	url = https://github.com/TyRoXx/silicium.git
+[submodule "dependencies/lua-cpp"]
+	path = dependencies/lua-cpp
+	url = https://github.com/TyRoXx/lua-cpp.git
