@@ -1,6 +1,7 @@
 #include <boost/program_options.hpp>
 #include <boost/optional.hpp>
 #include <iostream>
+#include <boost/thread.hpp>
 #include <silicium/http/receive_request.hpp>
 #include <silicium/asio/tcp_acceptor.hpp>
 #include <silicium/asio/writing_observable.hpp>
@@ -8,10 +9,11 @@
 #include <silicium/sink/iterator_sink.hpp>
 #include <silicium/http/generate_response.hpp>
 #include <silicium/observable/total_consumer.hpp>
-
-namespace Si
-{
-}
+#include <silicium/process.hpp>
+#include "server/find_cmake.hpp"
+#include "server/find_gcc.hpp"
+#include "server/find_executable.hpp"
+#include "server/cmake.hpp"
 
 namespace
 {
@@ -184,6 +186,66 @@ namespace
 
 		return std::move(result);
 	}
+
+	enum class build_result
+	{
+		success,
+		failure,
+		missing_dependency
+	};
+
+	Si::error_or<boost::optional<boost::filesystem::path>> find_git()
+	{
+		return buildserver::find_executable_unix("git", {});
+	}
+
+	void git_clone(std::string const &repository, boost::filesystem::path const &destination, boost::filesystem::path const &git_exe)
+	{
+		Si::process_parameters parameters;
+		parameters.executable = git_exe;
+		parameters.current_path = destination.parent_path();
+		parameters.arguments = {"clone", repository, destination.string()};
+		if (Si::run_process(parameters) != 0)
+		{
+			throw std::runtime_error("git-clone failed");
+		}
+	}
+
+	build_result build(std::string const &repository, boost::filesystem::path const &workspace)
+	{
+		boost::optional<boost::filesystem::path> maybe_git = find_git().get();
+		if (!maybe_git)
+		{
+			return build_result::missing_dependency;
+		}
+
+		boost::optional<boost::filesystem::path> maybe_cmake = buildserver::find_cmake().get();
+		if (!maybe_cmake)
+		{
+			return build_result::missing_dependency;
+		}
+
+		boost::filesystem::path const source = workspace / "source.git";
+		git_clone(repository, source, *maybe_git);
+
+		boost::filesystem::path const build = workspace / "build";
+		boost::filesystem::create_directories(build);
+
+		buildserver::cmake_exe cmake(*maybe_cmake);
+		boost::system::error_code error = cmake.generate(source, build, {});
+		if (error)
+		{
+			boost::throw_exception(boost::system::system_error(error));
+		}
+
+		error = cmake.build(build, boost::thread::hardware_concurrency());
+		if (error)
+		{
+			boost::throw_exception(boost::system::system_error(error));
+		}
+
+		return build_result::success;
+	}
 }
 
 int main(int argc, char **argv)
@@ -194,15 +256,43 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	//TODO: make the workspace configurable
+	boost::filesystem::path const &workspace = boost::filesystem::current_path();
+
 	boost::asio::io_service io;
 	notification_server notifications(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port), parsed_options->secret);
 	auto all_done = Si::make_total_consumer(
 		Si::transform(
 			Si::ref(notifications),
-			[](boost::optional<notification> element)
+			[&](boost::optional<notification> element)
 			{
 				assert(element);
 				std::cerr << "Received a notification\n";
+				try
+				{
+					boost::filesystem::remove_all(workspace);
+					boost::filesystem::create_directories(workspace);
+
+					//TODO: make the build async
+					switch (build(parsed_options->repository, workspace))
+					{
+					case build_result::success:
+						std::cerr << "Build success\n";
+						break;
+
+					case build_result::failure:
+						std::cerr << "Build failure\n";
+						break;
+
+					case build_result::missing_dependency:
+						std::cerr << "Build dependency missing\n";
+						break;
+					}
+				}
+				catch (std::exception const &ex)
+				{
+					std::cerr << "Exception: " <<  ex.what() << '\n';
+				}
 				return Si::nothing();
 			}
 		)
