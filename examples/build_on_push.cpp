@@ -22,6 +22,84 @@
 #include "server/find_gcc.hpp"
 #include "server/find_executable.hpp"
 #include "server/cmake.hpp"
+#include <unordered_map>
+
+namespace Si
+{
+	template <class BidirectionalRange>
+	struct range_value
+	{
+		BidirectionalRange range;
+
+		range_value()
+		{
+		}
+
+		range_value(BidirectionalRange range)
+			: range(std::move(range))
+		{
+		}
+	};
+
+	template <class BidirectionalRange1, class BidirectionalRange2>
+	bool operator == (range_value<BidirectionalRange1> const &left, range_value<BidirectionalRange2> const &right)
+	{
+		return boost::range::equal(left.range, right.range);
+	}
+
+	template <class BidirectionalRange>
+	auto make_range_value(BidirectionalRange &&range)
+	{
+		return range_value<typename std::decay<BidirectionalRange>::type>(std::forward<BidirectionalRange>(range));
+	}
+}
+
+namespace std
+{
+	template <class BidirectionalRange>
+	struct hash<Si::range_value<BidirectionalRange>>
+	{
+		std::size_t operator()(Si::range_value<BidirectionalRange> const &value) const
+		{
+			using boost::begin;
+			using boost::end;
+			return boost::hash_range(begin(value.range), end(value.range));
+		}
+	};
+}
+
+namespace web
+{
+	enum class request_handler_result
+	{
+		handled,
+		not_found
+	};
+
+	typedef std::function<request_handler_result (boost::asio::ip::tcp::socket &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context)> request_handler;
+
+	request_handler make_directory(std::unordered_map<Si::range_value<Si::memory_range>, request_handler> entries)
+	{
+		return [entries = std::move(entries)](
+			boost::asio::ip::tcp::socket &client,
+			Si::iterator_range<Si::memory_range const *> remaining_path,
+			Si::spawn_context yield
+		) -> request_handler_result
+		{
+			Si::memory_range current_path_element = (remaining_path.empty() ? Si::make_c_str_range("") : remaining_path.front());
+			auto entry = entries.find(Si::make_range_value(current_path_element));
+			if (entry == entries.end())
+			{
+				return request_handler_result::not_found;
+			}
+			if (!remaining_path.empty())
+			{
+				remaining_path.pop_front();
+			}
+			return entry->second(client, remaining_path, yield);
+		};
+	}
+}
 
 namespace
 {
@@ -165,32 +243,48 @@ namespace
 				return;
 			}
 
-			if (relative_uri->path.empty())
+			auto handle_request = web::make_directory({
+				{
+					Si::make_c_str_range(""),
+					web::request_handler([](boost::asio::ip::tcp::socket &client, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+					{
+						quick_final_response(client, yield, "200", "OK", "<h1>Overview</h1>");
+						return web::request_handler_result::handled;
+					})
+				},
+				{
+					Si::make_c_str_range("notify"),
+					web::request_handler([this, request](boost::asio::ip::tcp::socket &client, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+					{
+						return notify(client, yield, request.path);
+					})
+				}
+			});
+
+			switch (handle_request(client, Si::make_contiguous_range(relative_uri->path), yield))
 			{
-				quick_final_response(client, yield, "200", "OK", "<h1>Overview</h1>");
-			}
-			else if (boost::range::equal(Si::make_c_str_range("notify"), relative_uri->path[0]))
-			{
-				notify(client, yield, request.path);
-			}
-			else
-			{
-				quick_final_response(client, yield, "404", "Not Found", "404 - Not found");
+			case web::request_handler_result::handled:
+				break;
+
+			case web::request_handler_result::not_found:
+				quick_final_response(client, yield, "404", "Not Found", "404 - Not Found");
+				break;
 			}
 		}
 
 		template <class YieldContext>
-		void notify(boost::asio::ip::tcp::socket &client, YieldContext &&yield, Si::noexcept_string const &path)
+		web::request_handler_result notify(boost::asio::ip::tcp::socket &client, YieldContext &&yield, Si::noexcept_string const &path)
 		{
 			if (std::string::npos == path.find(m_secret))
 			{
 				quick_final_response(client, yield, "403", "Forbidden", "the path does not contain the correct secret");
-				return;
+				return web::request_handler_result::handled;
 			}
 
 			m_notifier.notify();
 
 			quick_final_response(client, yield, "200", "OK", "the server has been successfully notified");
+			return web::request_handler_result::handled;
 		}
 	};
 
