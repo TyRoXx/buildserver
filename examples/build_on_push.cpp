@@ -8,10 +8,10 @@
 #include <silicium/asio/posting_observable.hpp>
 #include <silicium/observable/spawn_coroutine.hpp>
 #include <silicium/observable/spawn_observable.hpp>
+#include <silicium/observable/total_consumer.hpp>
 #include <silicium/observable/thread.hpp>
 #include <silicium/sink/iterator_sink.hpp>
 #include <silicium/http/generate_response.hpp>
-#include <silicium/observable/total_consumer.hpp>
 #include <silicium/boost_threading.hpp>
 #include <silicium/run_process.hpp>
 #include <functional>
@@ -72,7 +72,8 @@ namespace
 		{
 		}
 
-		void async_get_one(Observer observer)
+		template <class ActualObserver>
+		void async_get_one(ActualObserver &&observer)
 		{
 			if (!m_is_running)
 			{
@@ -84,7 +85,7 @@ namespace
 				[this, &observer](Observer &my_observer) mutable
 				{
 					assert(!my_observer.get());
-					my_observer = std::move(observer);
+					my_observer = Observer(observer);
 				},
 				[this, &observer](notification)
 				{
@@ -254,6 +255,49 @@ namespace
 	}
 }
 
+namespace Si
+{
+	template <class Element>
+	struct erased_observer
+	{
+		typedef Element element_type;
+
+		erased_observer() BOOST_NOEXCEPT
+		{
+		}
+
+		template <class Observer>
+		explicit erased_observer(Observer &&observer)
+			: m_original(Si::to_unique(Si::virtualize_observer(std::forward<Observer>(observer))))
+		{
+		}
+
+		erased_observer(erased_observer &&) BOOST_NOEXCEPT = default;
+		erased_observer &operator = (erased_observer &&) BOOST_NOEXCEPT = default;
+
+		void got_element(Element element)
+		{
+			assert(m_original);
+			m_original->got_element(std::move(element));
+		}
+
+		void ended()
+		{
+			assert(m_original);
+			m_original->ended();
+		}
+
+		observer<Element> *get() const BOOST_NOEXCEPT
+		{
+			return m_original.get();
+		}
+
+	private:
+
+		std::unique_ptr<observer<Element>> m_original;
+	};
+}
+
 int main(int argc, char **argv)
 {
 	auto parsed_options = parse_options(argc, argv);
@@ -266,56 +310,55 @@ int main(int argc, char **argv)
 	boost::filesystem::path const &workspace = boost::filesystem::current_path();
 
 	boost::asio::io_service io;
-	notification_server<Si::ptr_observer<Si::observer<notification>>> notifications(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port), parsed_options->secret);
-	auto all_done = Si::make_total_consumer(
-		Si::transform(
-			Si::ref(notifications),
-			[&](boost::optional<notification> element)
+
+	Si::spawn_coroutine([&](Si::spawn_context yield)
+	{
+		notification_server<Si::erased_observer<notification>> notifications(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port), parsed_options->secret);
+		for (;;)
+		{
+			boost::optional<notification> notification_ = yield.get_one(Si::ref(notifications));
+			assert(notification_);
+			std::cerr << "Received a notification\n";
+			try
 			{
-				assert(element);
-				std::cerr << "Received a notification\n";
-				try
-				{
-					Si::spawn_observable(
-						Si::transform(
-							Si::asio::make_posting_observable(
-								io,
-								Si::make_thread_observable<Si::boost_threading>([&]()
-								{
-									boost::filesystem::remove_all(workspace);
-									boost::filesystem::create_directories(workspace);
-									return build(parsed_options->repository, workspace);
-								})
-							),
-							[](build_result result)
+				Si::spawn_observable(
+					Si::transform(
+						Si::asio::make_posting_observable(
+							io,
+							Si::make_thread_observable<Si::boost_threading>([&]()
 							{
-								switch (result)
-								{
-								case build_result::success:
-									std::cerr << "Build success\n";
-									break;
+								boost::filesystem::remove_all(workspace);
+								boost::filesystem::create_directories(workspace);
+								return build(parsed_options->repository, workspace);
+							})
+						),
+						[](build_result result)
+						{
+							switch (result)
+							{
+							case build_result::success:
+								std::cerr << "Build success\n";
+								break;
 
-								case build_result::failure:
-									std::cerr << "Build failure\n";
-									break;
+							case build_result::failure:
+								std::cerr << "Build failure\n";
+								break;
 
-								case build_result::missing_dependency:
-									std::cerr << "Build dependency missing\n";
-									break;
-								}
-								return Si::nothing();
+							case build_result::missing_dependency:
+								std::cerr << "Build dependency missing\n";
+								break;
 							}
-						)
-					);
-				}
-				catch (std::exception const &ex)
-				{
-					std::cerr << "Exception: " <<  ex.what() << '\n';
-				}
-				return Si::nothing();
+							return Si::nothing();
+						}
+					)
+				);
 			}
-		)
-	);
-	all_done.start();
+			catch (std::exception const &ex)
+			{
+				std::cerr << "Exception: " <<  ex.what() << '\n';
+			}
+		}
+	});
+
 	io.run();
 }
