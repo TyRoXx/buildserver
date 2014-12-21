@@ -1,8 +1,7 @@
-#include <boost/program_options.hpp>
-#include <boost/optional.hpp>
-#include <iostream>
-#include <boost/range/algorithm/equal.hpp>
-#include <boost/thread.hpp>
+#include "server/find_cmake.hpp"
+#include "server/find_gcc.hpp"
+#include "server/find_executable.hpp"
+#include "server/cmake.hpp"
 #include <silicium/http/receive_request.hpp>
 #include <silicium/http/uri.hpp>
 #include <silicium/asio/tcp_acceptor.hpp>
@@ -17,56 +16,14 @@
 #include <silicium/http/generate_response.hpp>
 #include <silicium/boost_threading.hpp>
 #include <silicium/run_process.hpp>
-#include <functional>
-#include "server/find_cmake.hpp"
-#include "server/find_gcc.hpp"
-#include "server/find_executable.hpp"
-#include "server/cmake.hpp"
+#include <silicium/range_value.hpp>
+#include <boost/program_options.hpp>
+#include <boost/optional.hpp>
+#include <boost/range/algorithm/equal.hpp>
+#include <boost/thread.hpp>
 #include <unordered_map>
-
-namespace Si
-{
-	template <class BidirectionalRange>
-	struct range_value
-	{
-		BidirectionalRange range;
-
-		range_value()
-		{
-		}
-
-		range_value(BidirectionalRange range)
-			: range(std::move(range))
-		{
-		}
-	};
-
-	template <class BidirectionalRange1, class BidirectionalRange2>
-	bool operator == (range_value<BidirectionalRange1> const &left, range_value<BidirectionalRange2> const &right)
-	{
-		return boost::range::equal(left.range, right.range);
-	}
-
-	template <class BidirectionalRange>
-	auto make_range_value(BidirectionalRange &&range)
-	{
-		return range_value<typename std::decay<BidirectionalRange>::type>(std::forward<BidirectionalRange>(range));
-	}
-}
-
-namespace std
-{
-	template <class BidirectionalRange>
-	struct hash<Si::range_value<BidirectionalRange>>
-	{
-		std::size_t operator()(Si::range_value<BidirectionalRange> const &value) const
-		{
-			using boost::begin;
-			using boost::end;
-			return boost::hash_range(begin(value.range), end(value.range));
-		}
-	};
-}
+#include <functional>
+#include <iostream>
 
 namespace web
 {
