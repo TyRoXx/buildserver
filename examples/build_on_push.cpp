@@ -33,12 +33,13 @@ namespace web
 		not_found
 	};
 
-	typedef std::function<request_handler_result (boost::asio::ip::tcp::socket &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context)> request_handler;
+	typedef std::function<request_handler_result (boost::asio::ip::tcp::socket &, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context)> request_handler;
 
 	request_handler make_directory(std::unordered_map<Si::range_value<Si::memory_range>, request_handler> entries)
 	{
 		return [entries = std::move(entries)](
 			boost::asio::ip::tcp::socket &client,
+			Si::http::request const &request,
 			Si::iterator_range<Si::memory_range const *> remaining_path,
 			Si::spawn_context yield
 		) -> request_handler_result
@@ -53,7 +54,7 @@ namespace web
 			{
 				remaining_path.pop_front();
 			}
-			return entry->second(client, remaining_path, yield);
+			return entry->second(client, request, remaining_path, yield);
 		};
 	}
 }
@@ -152,8 +153,8 @@ namespace
 		return web::request_handler_result::handled;
 	}
 
-	template <class YieldContext, class NotifierObserver>
-	void serve_client(boost::asio::ip::tcp::socket &client, YieldContext &&yield, Si::noexcept_string const &secret, saturating_notifier<NotifierObserver> &notifier)
+	template <class YieldContext>
+	void serve_client(boost::asio::ip::tcp::socket &client, YieldContext &&yield, web::request_handler const &root_request_handler)
 	{
 		Si::error_or<boost::optional<Si::http::request>> maybe_request = Si::http::receive_request(client, yield);
 		if (maybe_request.is_error())
@@ -175,25 +176,7 @@ namespace
 			return;
 		}
 
-		auto handle_request = web::make_directory({
-			{
-				Si::make_c_str_range(""),
-				web::request_handler([](boost::asio::ip::tcp::socket &client, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
-				{
-					quick_final_response(client, yield, "200", "OK", "<h1>Overview</h1>");
-					return web::request_handler_result::handled;
-				})
-			},
-			{
-				Si::make_c_str_range("notify"),
-				web::request_handler([request, &secret, &notifier](boost::asio::ip::tcp::socket &client, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
-				{
-					return notify(client, yield, request.path, secret, notifier);
-				})
-			}
-		});
-
-		switch (handle_request(client, Si::make_contiguous_range(relative_uri->path), yield))
+		switch (root_request_handler(client, request, Si::make_contiguous_range(relative_uri->path), yield))
 		{
 		case web::request_handler_result::handled:
 			break;
@@ -202,6 +185,29 @@ namespace
 			quick_final_response(client, yield, "404", "Not Found", "404 - Not Found");
 			break;
 		}
+	}
+
+	template <class NotifierObserver>
+	web::request_handler make_root_request_handler(Si::noexcept_string const &secret, saturating_notifier<NotifierObserver> &notifier)
+	{
+		auto handle_request = web::make_directory({
+			{
+				Si::make_c_str_range(""),
+				web::request_handler([](boost::asio::ip::tcp::socket &client, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+				{
+					quick_final_response(client, yield, "200", "OK", "<h1>Overview</h1>");
+					return web::request_handler_result::handled;
+				})
+			},
+			{
+				Si::make_c_str_range("notify"),
+				web::request_handler([&secret, &notifier](boost::asio::ip::tcp::socket &client, Si::http::request const &request, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+				{
+					return notify(client, yield, request.path, secret, notifier);
+				})
+			}
+		});
+		return handle_request;
 	}
 
 	struct options
@@ -337,15 +343,15 @@ int main(int argc, char **argv)
 	{
 		saturating_notifier<Si::erased_observer<notification>> notifier;
 
-		auto const &secret = parsed_options->secret;
+		web::request_handler root_request_handler = make_root_request_handler(parsed_options->secret, notifier);
 		Si::spawn_observable(Si::transform(
 			Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port))),
-			[&secret, &notifier](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
+			[&root_request_handler](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
 			{
 				auto client = maybe_client.get();
-				Si::spawn_coroutine([client, &secret, &notifier](Si::spawn_context yield)
+				Si::spawn_coroutine([client, &root_request_handler](Si::spawn_context yield)
 				{
-					serve_client(*client, yield, secret, notifier);
+					serve_client(*client, yield, root_request_handler);
 				});
 				return{};
 			}
