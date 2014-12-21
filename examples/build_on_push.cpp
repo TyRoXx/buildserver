@@ -1,8 +1,10 @@
 #include <boost/program_options.hpp>
 #include <boost/optional.hpp>
 #include <iostream>
+#include <boost/range/algorithm/equal.hpp>
 #include <boost/thread.hpp>
 #include <silicium/http/receive_request.hpp>
+#include <silicium/http/uri.hpp>
 #include <silicium/asio/tcp_acceptor.hpp>
 #include <silicium/asio/writing_observable.hpp>
 #include <silicium/asio/posting_observable.hpp>
@@ -119,7 +121,31 @@ namespace
 			}
 
 			Si::http::request const &request = *maybe_request.get();
-			if (std::string::npos == request.path.find(m_secret))
+
+			boost::optional<Si::http::uri> relative_uri = Si::http::parse_uri(Si::make_memory_range(request.path));
+			if (!relative_uri)
+			{
+				return;
+			}
+
+			if (relative_uri->path.empty())
+			{
+				quick_final_response(client, yield, "200", "OK", "<h1>Overview</h1>");
+			}
+			else if (boost::range::equal(Si::make_c_str_range("notify"), relative_uri->path[0]))
+			{
+				notify(client, yield, request.path);
+			}
+			else
+			{
+				quick_final_response(client, yield, "404", "Not Found", "404 - Not found");
+			}
+		}
+
+		template <class YieldContext>
+		void notify(boost::asio::ip::tcp::socket &client, YieldContext &&yield, Si::noexcept_string const &path)
+		{
+			if (std::string::npos == path.find(m_secret))
 			{
 				quick_final_response(client, yield, "403", "Forbidden", "the path does not contain the correct secret");
 				return;

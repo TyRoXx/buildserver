@@ -56,6 +56,11 @@ include_directories(${LUACPP_INCLUDE_DIRS})
 find_package(Lua51 REQUIRED)
 include_directories(${LUA_INCLUDE_DIR})
 
+find_package(UriParser REQUIRED)
+if(URIPARSER_FOUND)
+	include_directories(SYSTEM ${URIPARSER_INCLUDE_DIR})
+endif()
+
 include_directories(".")
 add_subdirectory("server")
 add_subdirectory("server-cli")
