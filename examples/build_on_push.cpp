@@ -127,9 +127,16 @@ namespace
 
 			Si::visit<void>(
 				m_observer_or_notification,
-				[](Observer &observer)
+				[this](Observer &observer)
 				{
-					Si::exchange(observer, Observer()).got_element(notification());
+					if (observer.get())
+					{
+						Si::exchange(observer, Observer()).got_element(notification());
+					}
+					else
+					{
+						m_observer_or_notification = notification();
+					}
 				},
 				[](notification const &)
 				{
@@ -279,37 +286,32 @@ int main(int argc, char **argv)
 			std::cerr << "Received a notification\n";
 			try
 			{
-				Si::spawn_observable(
-					Si::transform(
-						Si::asio::make_posting_observable(
-							io,
-							Si::make_thread_observable<Si::boost_threading>([&]()
-							{
-								boost::filesystem::remove_all(workspace);
-								boost::filesystem::create_directories(workspace);
-								return build(parsed_options->repository, workspace);
-							})
-						),
-						[](build_result result)
+				boost::optional<build_result> result = yield.get_one(
+					Si::asio::make_posting_observable(
+						io,
+						Si::make_thread_observable<Si::boost_threading>([&]()
 						{
-							switch (result)
-							{
-							case build_result::success:
-								std::cerr << "Build success\n";
-								break;
-
-							case build_result::failure:
-								std::cerr << "Build failure\n";
-								break;
-
-							case build_result::missing_dependency:
-								std::cerr << "Build dependency missing\n";
-								break;
-							}
-							return Si::nothing();
-						}
+							boost::filesystem::remove_all(workspace);
+							boost::filesystem::create_directories(workspace);
+							return build(parsed_options->repository, workspace);
+						})
 					)
 				);
+				assert(result);
+				switch (*result)
+				{
+				case build_result::success:
+					std::cerr << "Build success\n";
+					break;
+
+				case build_result::failure:
+					std::cerr << "Build failure\n";
+					break;
+
+				case build_result::missing_dependency:
+					std::cerr << "Build dependency missing\n";
+					break;
+				}
 			}
 			catch (std::exception const &ex)
 			{
