@@ -17,6 +17,7 @@
 #include <silicium/boost_threading.hpp>
 #include <silicium/run_process.hpp>
 #include <silicium/range_value.hpp>
+#include <silicium/html.hpp>
 #include <boost/program_options.hpp>
 #include <boost/optional.hpp>
 #include <boost/range/algorithm/equal.hpp>
@@ -62,7 +63,7 @@ namespace web
 namespace
 {
 	template <class AsyncWriteStream, class YieldContext, class Status, class StatusText>
-	void quick_final_response(AsyncWriteStream &client, YieldContext &&yield, Status &&status, StatusText &&status_text, std::string const &content)
+	void quick_final_response(AsyncWriteStream &client, YieldContext &&yield, Status &&status, StatusText &&status_text, Si::memory_range const &content)
 	{
 		std::vector<char> response;
 		{
@@ -143,13 +144,13 @@ namespace
 	{
 		if (std::string::npos == path.find(secret))
 		{
-			quick_final_response(client, yield, "403", "Forbidden", "the path does not contain the correct secret");
+			quick_final_response(client, yield, "403", "Forbidden", Si::make_c_str_range("the path does not contain the correct secret"));
 			return web::request_handler_result::handled;
 		}
 
 		notifier.notify();
 
-		quick_final_response(client, yield, "200", "OK", "the server has been successfully notified");
+		quick_final_response(client, yield, "200", "OK", Si::make_c_str_range("the server has been successfully notified"));
 		return web::request_handler_result::handled;
 	}
 
@@ -182,20 +183,75 @@ namespace
 			break;
 
 		case web::request_handler_result::not_found:
-			quick_final_response(client, yield, "404", "Not Found", "404 - Not Found");
+			quick_final_response(client, yield, "404", "Not Found", Si::make_c_str_range("404 - Not Found"));
 			break;
 		}
 	}
 
+	enum class build_result
+	{
+		success,
+		failure,
+		missing_dependency
+	};
+
+	struct overview_state
+	{
+		bool is_building = false;
+		boost::optional<build_result> last_result;
+	};
+
 	template <class NotifierObserver>
-	web::request_handler make_root_request_handler(Si::noexcept_string const &secret, saturating_notifier<NotifierObserver> &notifier)
+	web::request_handler make_root_request_handler(Si::noexcept_string const &secret, saturating_notifier<NotifierObserver> &notifier, overview_state const &overview)
 	{
 		auto handle_request = web::make_directory({
 			{
 				Si::make_c_str_range(""),
-				web::request_handler([](boost::asio::ip::tcp::socket &client, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+				web::request_handler([&overview](boost::asio::ip::tcp::socket &client, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
 				{
-					quick_final_response(client, yield, "200", "OK", "<h1>Overview</h1>");
+					std::vector<char> content;
+					auto html = Si::html::make_generator(Si::make_container_sink(content));
+					html.element("html", [&]()
+					{
+						html.element("head", [&]()
+						{
+							html.element("title", [&]()
+							{
+								html.write("buildserver overview");
+							});
+						});
+						html.element("body", [&]()
+						{
+							html.element("h1", [&]()
+							{
+								html.write("Overview");
+							});
+							html.element("p", [&]()
+							{
+								html.write(overview.is_building ? "building.." : "idle");
+							});
+							if (overview.last_result)
+							{
+								html.element("p", [&]()
+								{
+									html.write("last build ");
+									switch (*overview.last_result)
+									{
+									case build_result::success:
+										html.write("succeeded");
+										break;
+									case build_result::failure:
+										html.write("failed");
+										break;
+									case build_result::missing_dependency:
+										html.write("had missing dependencies");
+										break;
+									}
+								});
+							}
+						});
+					});
+					quick_final_response(client, yield, "200", "OK", Si::make_memory_range(content));
 					return web::request_handler_result::handled;
 				})
 			},
@@ -264,13 +320,6 @@ namespace
 
 		return std::move(result);
 	}
-
-	enum class build_result
-	{
-		success,
-		failure,
-		missing_dependency
-	};
 
 	Si::error_or<boost::optional<boost::filesystem::path>> find_git()
 	{
@@ -342,8 +391,9 @@ int main(int argc, char **argv)
 	Si::spawn_coroutine([&](Si::spawn_context yield)
 	{
 		saturating_notifier<Si::erased_observer<notification>> notifier;
+		overview_state overview;
 
-		web::request_handler root_request_handler = make_root_request_handler(parsed_options->secret, notifier);
+		web::request_handler root_request_handler = make_root_request_handler(parsed_options->secret, notifier, overview);
 		Si::spawn_observable(Si::transform(
 			Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port))),
 			[&root_request_handler](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
@@ -364,6 +414,7 @@ int main(int argc, char **argv)
 			std::cerr << "Received a notification\n";
 			try
 			{
+				overview.is_building = true;
 				boost::optional<build_result> result = yield.get_one(
 					Si::asio::make_posting_observable(
 						io,
@@ -390,11 +441,13 @@ int main(int argc, char **argv)
 					std::cerr << "Build dependency missing\n";
 					break;
 				}
+				overview.last_result = result;
 			}
 			catch (std::exception const &ex)
 			{
 				std::cerr << "Exception: " <<  ex.what() << '\n';
 			}
+			overview.is_building = false;
 		}
 	});
 
