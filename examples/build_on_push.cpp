@@ -49,6 +49,55 @@ namespace
 	};
 
 	template <class Observer>
+	struct saturating_notifier
+	{
+		typedef notification element_type;
+
+		template <class ActualObserver>
+		void async_get_one(ActualObserver &&observer)
+		{
+			return Si::visit<void>(
+				m_observer_or_notification,
+				[this, &observer](Observer &my_observer) mutable
+				{
+					assert(!my_observer.get());
+					my_observer = Observer(observer);
+				},
+				[this, &observer](notification)
+				{
+					m_observer_or_notification = Observer();
+					std::move(observer).got_element(notification());
+				}
+			);
+		}
+
+		void notify()
+		{
+			Si::visit<void>(
+				m_observer_or_notification,
+				[this](Observer &observer)
+				{
+					if (observer.get())
+					{
+						Si::exchange(observer, Observer()).got_element(notification());
+					}
+					else
+					{
+						m_observer_or_notification = notification();
+					}
+				},
+				[](notification const &)
+				{
+				}
+			);
+		}
+
+	private:
+
+		Si::fast_variant<Observer, notification> m_observer_or_notification;
+	};
+
+	template <class Observer>
 	struct notification_server
 	{
 		typedef notification element_type;
@@ -83,19 +132,7 @@ namespace
 				m_server.start();
 				m_is_running = true;
 			}
-			return Si::visit<void>(
-				m_observer_or_notification,
-				[this, &observer](Observer &my_observer) mutable
-				{
-					assert(!my_observer.get());
-					my_observer = Observer(observer);
-				},
-				[this, &observer](notification)
-				{
-					m_observer_or_notification = Observer();
-					std::move(observer).got_element(notification());
-				}
-			);
+			m_notifier.async_get_one(std::forward<ActualObserver>(observer));
 		}
 
 	private:
@@ -103,7 +140,7 @@ namespace
 		Si::total_consumer<Si::unique_observable<Si::nothing>> m_server;
 		bool m_is_running;
 		Si::noexcept_string m_secret;
-		Si::fast_variant<Observer, notification> m_observer_or_notification;
+		saturating_notifier<Observer> m_notifier;
 
 		template <class YieldContext>
 		void serve_client(boost::asio::ip::tcp::socket &client, YieldContext &&yield)
@@ -151,23 +188,7 @@ namespace
 				return;
 			}
 
-			Si::visit<void>(
-				m_observer_or_notification,
-				[this](Observer &observer)
-				{
-					if (observer.get())
-					{
-						Si::exchange(observer, Observer()).got_element(notification());
-					}
-					else
-					{
-						m_observer_or_notification = notification();
-					}
-				},
-				[](notification const &)
-				{
-				}
-			);
+			m_notifier.notify();
 
 			quick_final_response(client, yield, "200", "OK", "the server has been successfully notified");
 		}
