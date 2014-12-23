@@ -22,6 +22,7 @@
 #include <boost/optional.hpp>
 #include <boost/range/algorithm/equal.hpp>
 #include <boost/thread.hpp>
+#include <boost/filesystem/operations.hpp>
 #include <unordered_map>
 #include <functional>
 #include <iostream>
@@ -38,7 +39,11 @@ namespace web
 
 	request_handler make_directory(std::unordered_map<Si::range_value<Si::memory_range>, request_handler> entries)
 	{
-		return [entries = std::move(entries)](
+		return [entries
+#if SILICIUM_COMPILER_HAS_EXTENDED_CAPTURE
+			= std::move(entries)
+#endif
+			](
 			boost::asio::ip::tcp::socket &client,
 			Si::http::request const &request,
 			Si::iterator_range<Si::memory_range const *> remaining_path,
@@ -359,7 +364,7 @@ namespace
 		boost::filesystem::create_directories(build);
 
 		buildserver::cmake_exe cmake(*maybe_cmake);
-		boost::system::error_code error = cmake.generate(source, build, {});
+		boost::system::error_code error = cmake.generate(source, build, boost::unordered_map<std::string, std::string>{});
 		if (error)
 		{
 			boost::throw_exception(boost::system::system_error(error));
