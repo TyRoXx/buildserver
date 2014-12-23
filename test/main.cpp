@@ -38,9 +38,17 @@ BOOST_AUTO_TEST_CASE(cmake_exe_test)
 	boost::filesystem::remove_all(build_path);
 	boost::filesystem::create_directories(build_path);
 	boost::filesystem::path const resources_path = boost::filesystem::path(__FILE__).parent_path().parent_path() / "test-resources";
-	cmake_driver.generate(resources_path / "test1", build_path, boost::unordered_map<std::string, std::string>());
+	cmake_driver.generate(resources_path / "test1", build_path, boost::unordered_map<std::string, std::string>{});
 	cmake_driver.build(build_path, boost::thread::hardware_concurrency());
-	boost::filesystem::path const built_exe = build_path / "test1";
+	boost::filesystem::path const built_exe = build_path
+#ifdef _WIN32
+		/ "Debug"
+#endif
+		/ "test1"
+#ifdef _WIN32
+		".exe"
+#endif
+		;
 	Si::process_parameters parameters;
 	parameters.executable = built_exe;
 	parameters.current_path = build_path;
@@ -49,5 +57,10 @@ BOOST_AUTO_TEST_CASE(cmake_exe_test)
 	parameters.out = &stdout_;
 	parameters.err = &stdout_;
 	BOOST_CHECK_EQUAL(0, Si::run_process(parameters));
-	BOOST_CHECK_EQUAL("It works!\n", output);
+	auto expected_output = "It works!"
+#ifdef _WIN32
+		"\r"
+#endif
+		"\n";
+	BOOST_CHECK_EQUAL(expected_output, output);
 }

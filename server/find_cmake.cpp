@@ -29,7 +29,10 @@ namespace buildserver
 		}
 		std::unique_ptr<wchar_t, com_deleter> free_programs(programs);
 		boost::filesystem::path const programs_path = programs;
-		return find_file_in_directories("cmake.exe", { programs_path / "CMake/bin" });
+		return find_file_in_directories("cmake.exe", {
+			programs_path / "CMake/bin",
+			programs_path / "CMake 2.8/bin"
+		});
 #else
 		return find_executable_unix("cmake", {});
 #endif
