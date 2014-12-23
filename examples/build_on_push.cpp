@@ -276,6 +276,7 @@ namespace
 		std::string repository;
 		boost::uint16_t port;
 		Si::noexcept_string secret;
+		boost::filesystem::path workspace;
 	};
 
 	boost::optional<options> parse_options(int argc, char **argv)
@@ -289,12 +290,14 @@ namespace
 			("repository,r", boost::program_options::value(&result.repository), "the URI for git cloning the code")
 			("port,p", boost::program_options::value(&result.port), "port to listen on for POSTed push notifications")
 			("secret,s", boost::program_options::value(&result.secret), "a string that needs to be in the query for the notification to be accepted")
+			("workspace,w", boost::program_options::value(&result.workspace), "")
 		;
 
 		boost::program_options::positional_options_description positional;
 		positional.add("repository", 1);
 		positional.add("port", 1);
 		positional.add("secret", 1);
+		positional.add("workspace", 1);
 		boost::program_options::variables_map vm;
 		try
 		{
@@ -323,12 +326,23 @@ namespace
 			return boost::none;
 		}
 
+		if (result.workspace.empty())
+		{
+			std::cerr << "Missing option value --workspace\n";
+			std::cerr << desc << "\n";
+			return boost::none;
+		}
+
 		return std::move(result);
 	}
 
 	Si::error_or<boost::optional<boost::filesystem::path>> find_git()
 	{
+#ifdef _WIN32
+		return buildserver::find_file_in_directories("git.exe", {"C:\\Program Files (x86)\\Git\\bin"});
+#else
 		return buildserver::find_executable_unix("git", {});
+#endif
 	}
 
 	void git_clone(std::string const &repository, boost::filesystem::path const &destination, boost::filesystem::path const &git_exe)
@@ -388,9 +402,6 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	//TODO: make the workspace configurable
-	boost::filesystem::path const &workspace = boost::filesystem::current_path();
-
 	boost::asio::io_service io;
 
 	Si::spawn_coroutine([&](Si::spawn_context yield)
@@ -425,9 +436,9 @@ int main(int argc, char **argv)
 						io,
 						Si::make_thread_observable<Si::boost_threading>([&]()
 						{
-							boost::filesystem::remove_all(workspace);
-							boost::filesystem::create_directories(workspace);
-							return build(parsed_options->repository, workspace);
+							boost::filesystem::remove_all(parsed_options->workspace);
+							boost::filesystem::create_directories(parsed_options->workspace);
+							return build(parsed_options->repository, parsed_options->workspace);
 						})
 					)
 				);
