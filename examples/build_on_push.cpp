@@ -431,7 +431,7 @@ int main(int argc, char **argv)
 			try
 			{
 				overview.is_building = true;
-				boost::optional<build_result> result = yield.get_one(
+				boost::optional<boost::unique_future<build_result>> maybe_result = yield.get_one(
 					Si::asio::make_posting_observable(
 						io,
 						Si::make_thread_observable<Si::boost_threading>([&]()
@@ -442,8 +442,9 @@ int main(int argc, char **argv)
 						})
 					)
 				);
-				assert(result);
-				switch (*result)
+				assert(maybe_result);
+				auto const result = maybe_result->get();
+				switch (result)
 				{
 				case build_result::success:
 					std::cerr << "Build success\n";
@@ -462,6 +463,7 @@ int main(int argc, char **argv)
 			catch (std::exception const &ex)
 			{
 				std::cerr << "Exception: " <<  ex.what() << '\n';
+				overview.last_result = build_result::failure;
 			}
 			overview.is_building = false;
 		}
