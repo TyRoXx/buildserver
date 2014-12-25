@@ -196,8 +196,7 @@ namespace
 	enum class build_result
 	{
 		success,
-		failure,
-		missing_dependency
+		failure
 	};
 
 	struct overview_state
@@ -247,9 +246,6 @@ namespace
 										break;
 									case build_result::failure:
 										html.write("failed");
-										break;
-									case build_result::missing_dependency:
-										html.write("had missing dependencies");
 										break;
 									}
 								});
@@ -357,34 +353,26 @@ namespace
 		}
 	}
 
-	build_result build(std::string const &repository, boost::filesystem::path const &workspace)
+	build_result build(
+		std::string const &repository,
+		boost::filesystem::path const &workspace,
+		boost::filesystem::path const &git,
+		boost::filesystem::path const &cmake)
 	{
-		boost::optional<boost::filesystem::path> maybe_git = find_git().get();
-		if (!maybe_git)
-		{
-			return build_result::missing_dependency;
-		}
-
-		boost::optional<boost::filesystem::path> maybe_cmake = buildserver::find_cmake().get();
-		if (!maybe_cmake)
-		{
-			return build_result::missing_dependency;
-		}
-
 		boost::filesystem::path const source = workspace / "source.git";
-		git_clone(repository, source, *maybe_git);
+		git_clone(repository, source, git);
 
 		boost::filesystem::path const build = workspace / "build";
 		boost::filesystem::create_directories(build);
 
-		buildserver::cmake_exe cmake(*maybe_cmake);
-		boost::system::error_code error = cmake.generate(source, build, boost::unordered_map<std::string, std::string>{});
+		buildserver::cmake_exe cmake_builder(cmake);
+		boost::system::error_code error = cmake_builder.generate(source, build, boost::unordered_map<std::string, std::string>{});
 		if (error)
 		{
 			boost::throw_exception(boost::system::system_error(error));
 		}
 
-		error = cmake.build(build, boost::thread::hardware_concurrency());
+		error = cmake_builder.build(build, boost::thread::hardware_concurrency());
 		if (error)
 		{
 			boost::throw_exception(boost::system::system_error(error));
@@ -399,6 +387,20 @@ int main(int argc, char **argv)
 	auto parsed_options = parse_options(argc, argv);
 	if (!parsed_options)
 	{
+		return 1;
+	}
+
+	boost::optional<boost::filesystem::path> maybe_git = find_git().get();
+	if (!maybe_git)
+	{
+		std::cerr << "Could not find Git\n";
+		return 1;
+	}
+
+	boost::optional<boost::filesystem::path> maybe_cmake = buildserver::find_cmake().get();
+	if (!maybe_cmake)
+	{
+		std::cerr << "Could not find CMake\n";
 		return 1;
 	}
 
@@ -438,7 +440,7 @@ int main(int argc, char **argv)
 						{
 							boost::filesystem::remove_all(parsed_options->workspace);
 							boost::filesystem::create_directories(parsed_options->workspace);
-							return build(parsed_options->repository, parsed_options->workspace);
+							return build(parsed_options->repository, parsed_options->workspace, *maybe_git, *maybe_cmake);
 						})
 					)
 				);
@@ -452,10 +454,6 @@ int main(int argc, char **argv)
 
 				case build_result::failure:
 					std::cerr << "Build failure\n";
-					break;
-
-				case build_result::missing_dependency:
-					std::cerr << "Build dependency missing\n";
 					break;
 				}
 				overview.last_result = result;
