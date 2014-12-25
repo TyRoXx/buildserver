@@ -350,9 +350,14 @@ namespace
 		parameters.executable = git_exe;
 		parameters.current_path = destination.parent_path();
 		parameters.arguments = {"clone", repository, destination.string()};
-		Si::pipe standard_output_and_error = Si::make_pipe().get();
-		Si::file_handle standard_input = Si::open_reading("/dev/null").get();
-		Si::async_process process = Si::launch_process(parameters, standard_input.handle, standard_output_and_error.write.handle, standard_output_and_error.write.handle).get();
+		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
+		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::open_reading("/dev/null").get());
+		Si::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::launch_process(
+			parameters,
+			standard_input.handle,
+			standard_output_and_error.write.handle,
+			standard_output_and_error.write.handle
+		).get());
 		boost::asio::io_service io;
 		Si::spawn_observable(
 			Si::while_(
