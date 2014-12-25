@@ -11,6 +11,7 @@
 #include <silicium/observable/spawn_observable.hpp>
 #include <silicium/observable/erased_observer.hpp>
 #include <silicium/observable/total_consumer.hpp>
+#include <silicium/observable/while.hpp>
 #include <silicium/observable/thread.hpp>
 #include <silicium/sink/iterator_sink.hpp>
 #include <silicium/http/generate_response.hpp>
@@ -18,6 +19,7 @@
 #include <silicium/run_process.hpp>
 #include <silicium/range_value.hpp>
 #include <silicium/html.hpp>
+#include <silicium/async_process.hpp>
 #include <boost/program_options.hpp>
 #include <boost/optional.hpp>
 #include <boost/range/algorithm/equal.hpp>
@@ -343,11 +345,40 @@ namespace
 
 	void git_clone(std::string const &repository, boost::filesystem::path const &destination, boost::filesystem::path const &git_exe)
 	{
-		Si::process_parameters parameters;
+		Si::async_process_parameters parameters;
 		parameters.executable = git_exe;
 		parameters.current_path = destination.parent_path();
 		parameters.arguments = {"clone", repository, destination.string()};
-		if (Si::run_process(parameters) != 0)
+		Si::pipe standard_input = Si::make_pipe().get();
+		Si::pipe standard_output_and_error = Si::make_pipe().get();
+		Si::async_process process = Si::launch_process(parameters, standard_input.read.handle, standard_output_and_error.write.handle, standard_output_and_error.write.handle).get();
+		boost::asio::io_service io;
+		Si::spawn_observable(
+			Si::while_(
+				Si::transform(
+					Si::process_output(Si::make_unique<Si::process_output::stream>(io, standard_output_and_error.read.handle)),
+					[](Si::error_or<Si::memory_range> element)
+					{
+						if (element.is_error())
+						{
+							return false;
+						}
+						else
+						{
+							std::cerr.write(element->begin(), element->size());
+							return true;
+						}
+					}
+				),
+				[](bool v) { return v; }
+			)
+		);
+		standard_output_and_error.read.release();
+		standard_output_and_error.write.close();
+		standard_input.read.close();
+		io.run();
+		int exit_code = process.wait_for_exit().get();
+		if (exit_code != 0)
 		{
 			throw std::runtime_error("git-clone failed");
 		}
