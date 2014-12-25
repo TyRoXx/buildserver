@@ -356,7 +356,7 @@ namespace
 		Si::spawn_observable(
 			Si::while_(
 				Si::transform(
-					Si::process_output(Si::make_unique<Si::process_output::stream>(io, standard_output_and_error.read.handle)),
+					Si::process_output(Si::to_unique(Si::make_asio_file_stream<Si::process_output::stream>(io, std::move(standard_output_and_error.read)))),
 					[](Si::error_or<Si::memory_range> element)
 					{
 						if (element.is_error())
@@ -373,7 +373,6 @@ namespace
 				[](bool v) { return v; }
 			)
 		);
-		standard_output_and_error.read.release();
 		standard_output_and_error.write.close();
 		standard_input.read.close();
 		io.run();
