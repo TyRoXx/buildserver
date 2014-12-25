@@ -39,8 +39,7 @@ include_directories(SYSTEM ${Boost_INCLUDE_DIR})
 link_directories(${Boost_LIBRARY_DIR})
 
 if(WIN32)
-	#Boost.Asio wants this for no reason
-	add_definitions("-D_WIN32_WINDOWS")
+	add_definitions("-D_WIN32_WINNT=0x0600")
 endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
