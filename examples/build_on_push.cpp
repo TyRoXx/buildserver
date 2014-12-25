@@ -13,6 +13,7 @@
 #include <silicium/observable/total_consumer.hpp>
 #include <silicium/observable/while.hpp>
 #include <silicium/observable/thread.hpp>
+#include <silicium/open.hpp>
 #include <silicium/sink/iterator_sink.hpp>
 #include <silicium/http/generate_response.hpp>
 #include <silicium/boost_threading.hpp>
@@ -349,9 +350,9 @@ namespace
 		parameters.executable = git_exe;
 		parameters.current_path = destination.parent_path();
 		parameters.arguments = {"clone", repository, destination.string()};
-		Si::pipe standard_input = Si::make_pipe().get();
 		Si::pipe standard_output_and_error = Si::make_pipe().get();
-		Si::async_process process = Si::launch_process(parameters, standard_input.read.handle, standard_output_and_error.write.handle, standard_output_and_error.write.handle).get();
+		Si::file_handle standard_input = Si::open_reading("/dev/null").get();
+		Si::async_process process = Si::launch_process(parameters, standard_input.handle, standard_output_and_error.write.handle, standard_output_and_error.write.handle).get();
 		boost::asio::io_service io;
 		Si::spawn_observable(
 			Si::while_(
@@ -374,7 +375,6 @@ namespace
 			)
 		);
 		standard_output_and_error.write.close();
-		standard_input.read.close();
 		io.run();
 		int exit_code = process.wait_for_exit().get();
 		if (exit_code != 0)
