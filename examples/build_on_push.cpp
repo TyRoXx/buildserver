@@ -16,7 +16,7 @@
 #include <silicium/open.hpp>
 #include <silicium/sink/iterator_sink.hpp>
 #include <silicium/http/generate_response.hpp>
-#include <silicium/boost_threading.hpp>
+#include <silicium/std_threading.hpp>
 #include <silicium/run_process.hpp>
 #include <silicium/range_value.hpp>
 #include <silicium/html.hpp>
@@ -462,16 +462,16 @@ int main(int argc, char **argv)
 
 		for (;;)
 		{
-			boost::optional<notification> notification_ = yield.get_one(Si::ref(notifier));
+			Si::optional<notification> notification_ = yield.get_one(Si::ref(notifier));
 			assert(notification_);
 			std::cerr << "Received a notification\n";
 			try
 			{
 				overview.is_building = true;
-				boost::optional<boost::unique_future<build_result>> maybe_result = yield.get_one(
+				Si::optional<std::future<build_result>> maybe_result = yield.get_one(
 					Si::asio::make_posting_observable(
 						io,
-						Si::make_thread_observable<Si::boost_threading>([&]()
+						Si::make_thread_observable<Si::std_threading>([&]()
 						{
 							boost::filesystem::remove_all(parsed_options->workspace);
 							boost::filesystem::create_directories(parsed_options->workspace);
