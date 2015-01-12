@@ -1,6 +1,7 @@
 #include <boost/asio/io_service.hpp>
 #include <luacpp/register_any_function.hpp>
 #include <luacpp/load.hpp>
+#include <boost/range/algorithm/equal.hpp>
 
 namespace
 {
@@ -22,6 +23,11 @@ int main()
 	lua::stack s(*lua_state);
 	lua::stack_value require = lua::register_any_function(s, [](Si::memory_range name, Si::memory_range version)
 	{
+		if (boost::range::equal(name, Si::make_c_str_range("steps")) &&
+		    boost::range::equal(version, Si::make_c_str_range("1.0")))
+		{
+
+		}
 	});
 	script_main.release();
 	require.release();
