@@ -13,6 +13,7 @@ return function (require)
 		-- the trigger or step.
 		-- You can change name and even the type of the trigger or
 		-- step and still keep its history if you keep the ID.
+		-- You can also change relationships between steps at any time.
 		"100"
 	);
 
@@ -48,12 +49,12 @@ return function (require)
 		end
 	)
 
-	return history.maximum(
-		steps.sequential {
-			-- the first element can be either a trigger or an existing step
-			regular_check,
-			top_message,
-			changed_messages
-		}
-	);
+	return steps.sequential {
+		-- the first element can be either a trigger or an existing step
+		regular_check,
+		-- the following elements have to be steps
+		top_message,
+		-- the output of the last step will be the output of the sequence
+		changed_messages
+	};
 end
