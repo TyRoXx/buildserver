@@ -8,13 +8,17 @@ return function (require)
 	-- administrator.
 	local change_triggered = trigger.private_web_trigger(
 		-- The description can be changed at any time.
-		"a push happened on the repository"
+		"a push happened on the repository",
 		-- This is the unique identifier (relative to this script) of
 		-- the trigger or step.
 		-- You can change name and even the type of the trigger or
 		-- step and still keep its history if you keep the ID.
 		-- You can also change relationships between steps at any time.
-		"100"
+		"100",
+		-- Optional ID of the web trigger. The default would be the
+		-- unique identifier. This ID has to be unique among all the
+		-- web triggers in this script. 
+		"repository-pushed"
 	);
 
 	-- Trigger the build one hour after the last commit hook trigger
@@ -26,7 +30,8 @@ return function (require)
 		3600,
 		function()
 			return true
-	end)
+		end
+	)
 
 	-- Returns the latest commit message on the master branch.
 	-- Does not take any input other than data from github.com.
@@ -49,7 +54,7 @@ return function (require)
 		end
 	)
 
-	return steps.sequential {
+	return steps.sequence {
 		-- the first element can be either a trigger or an existing step
 		regular_check,
 		-- the following elements have to be steps
