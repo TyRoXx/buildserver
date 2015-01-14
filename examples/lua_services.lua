@@ -1,7 +1,9 @@
 local signal = function()
 	local subscribers = {}
 	local notify_all = function(...)
-		for _,subscriber in ipairs(subscribers) do
+		local current_subscribers = subscribers
+		subscribers = {}
+		for _,subscriber in ipairs(current_subscribers) do
 			subscriber(unpack(arg))
 		end
 	end
@@ -10,6 +12,18 @@ local signal = function()
 			table.insert(subscribers, subscriber)
 		end
 	}, notify_all
+end
+
+local subscribe_forever = function(signal, handler)
+	local renew = nil
+	local subscriber = function(...)
+		renew()
+		handler(unpack(arg))
+	end)
+	renew = function()
+		signal:subscribe(subscriber)
+	end
+	renew()
 end
 
 local describe = function(description, identifier, step)
@@ -44,37 +58,60 @@ local timeout = function(input, duration, make_timeout_value)
 			set_timer()
 		end)
 	end
-	input:subscribe(function(...)
+	subscribe_forever(input, function(...)
 		if timer then
 			timer:stop()
 		end
-		notify_all(unpack(arg))
 		set_timer()
+		notify_all(unpack(arg))
 	end)
 	return step
 end
 
-local sequence = function(step_array)
+local pipe = function(step_array)
 	local step, notify_all = signal()
-	step.kind = "sequence"
+	step.kind = "pipe"
 	local previous_step = nil
 	for _,step in ipairs(step_array) do
 		if previous_step ~= nil then
-			previous_step:subscribe(function(...)
-				step:run(unpack(arg))
-			end)
+			subscribe_forever(
+				previous_step, 
+				function(...)
+					step:run(unpack(arg))
+				end
+			)
 		end
 		previous_step = step
 	end
-	previous_step:subscribe(function(...)
-		notify_all(unpack(arg))
-	end)
+	subscribe_forever(
+		previous_step,
+		function(...)
+			notify_all(unpack(arg))
+		end
+	)
+	return step
+end
+
+local critical_section = function(head, tail)
+	local step, notify_all = signal()
+	step.kind = "critical_section"
+	local enter = nil
+	enter = function()
+		head:subscribe(function(...)
+			tail:subscribe(function(...)
+				enter()
+				notify_all(unpack(arg))
+			end)
+			tail:run(unpack(arg))
+		end)
+	end
+	enter()
 	return step
 end
 
 local spawn = function(step)
-	step:subscribe(function()
-		-- ignore any output
+	subscribe_forever(step, function(...)
+		-- ignore any output of the step
 	end)
 end
 
@@ -135,12 +172,16 @@ return function (require)
 		end)
 	)
 
-	spawn(sequence {
-		-- the first element can be either a trigger or an existing step
-		regular_check,
-		-- the following elements have to be steps
-		top_message,
-		-- the output of the last step will be the output of the sequence
-		changed_messages
-	})
+	spawn(
+		pipe{
+			-- the first element can be either a trigger or an existing step
+			regular_check,
+			critical_section(
+				-- the following elements have to be steps
+				top_message,
+				-- the output of the last step will be the output of the sequence
+				changed_messages
+			)
+		}
+	)
 end
