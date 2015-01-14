@@ -23,9 +23,11 @@ namespace
 			{
 				lua::stack_value module = lua::create_table(stack);
 				lua::stack s(stack);
-				module.set("custom", lua::register_any_function(s, [](Si::memory_range name, lua::any_local start)
+				module.set("map", lua::register_any_function(s, [](lua::any_local start)
 				{
-					std::cerr << std::string(name.begin(), name.end()) << '\n';
+				}));
+				module.set("sequence", lua::register_any_function(s, [](lua::any_local elements)
+				{
 				}));
 				return module;
 			}
