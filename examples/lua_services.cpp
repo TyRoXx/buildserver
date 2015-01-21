@@ -6,10 +6,44 @@
 
 namespace buildserver
 {
-	struct process_result
+	struct scoped_temporary_directory : private boost::noncopyable
 	{
+		boost::filesystem::path where;
+		std::function<void (boost::filesystem::path const &)> on_obsoletion;
 
+		scoped_temporary_directory(
+			boost::filesystem::path where,
+			std::function<void (boost::filesystem::path const &)> on_obsoletion)
+			: where(std::move(where))
+			, on_obsoletion(std::move(on_obsoletion))
+		{
+		}
+
+		~scoped_temporary_directory() BOOST_NOEXCEPT
+		{
+			if (on_obsoletion)
+			{
+				return;
+			}
+			on_obsoletion(where);
+		}
 	};
+
+	struct memory_blob
+	{
+		std::vector<char> content;
+	};
+
+	struct failure_description
+	{
+		Si::noexcept_string message;
+	};
+
+	typedef Si::fast_variant<
+		failure_description,
+		std::shared_ptr<scoped_temporary_directory>,
+		memory_blob
+	> process_result;
 
 	struct process
 	{
@@ -35,6 +69,38 @@ namespace buildserver
 		{
 		}
 	};
+
+	struct delay : process
+	{
+		explicit delay(boost::asio::io_service &io, boost::asio::steady_timer::duration amount, process_result output)
+			: m_timer(io)
+			, m_amount(amount)
+			, m_output(std::move(output))
+		{
+		}
+
+		virtual void async_get_result(std::function<void (process_result)> result_handler) SILICIUM_OVERRIDE
+		{
+			m_timer.expires_from_now(m_amount);
+			m_timer.async_wait([result_handler, output = std::move(this->m_output)](boost::system::error_code ec) mutable
+			{
+				if (!ec)
+				{
+					result_handler(failure_description{"A timer failed on the system level: " + Si::to_noexcept_string(ec.message())});
+					return;
+				}
+				std::cerr << "timer elapsed\n";
+				result_handler(std::move(output));
+			});
+			std::cerr << "timer started\n";
+		}
+
+	private:
+
+		boost::asio::steady_timer m_timer;
+		boost::asio::steady_timer::duration m_amount;
+		process_result m_output;
+	};
 }
 
 namespace
@@ -52,7 +118,7 @@ namespace
 			std::cerr << "Step A\n";
 			m_io->post([result_handler]()
 			{
-				result_handler(buildserver::process_result{});
+				result_handler(buildserver::memory_blob{});
 			});
 		}
 
@@ -60,34 +126,6 @@ namespace
 
 		boost::asio::io_service *m_io;
 		buildserver::process_result m_input;
-	};
-
-	struct delay : buildserver::process
-	{
-		explicit delay(boost::asio::io_service &io, boost::asio::steady_timer::duration amount, buildserver::process_result output)
-			: m_timer(io)
-			, m_amount(amount)
-			, m_output(std::move(output))
-		{
-		}
-
-		virtual void async_get_result(std::function<void (buildserver::process_result)> result_handler) SILICIUM_OVERRIDE
-		{
-			m_timer.expires_from_now(m_amount);
-			m_timer.async_wait([result_handler, output = std::move(this->m_output)](boost::system::error_code ec) mutable
-			{
-				assert(!ec); //TODO
-				std::cerr << "timer elapsed\n";
-				result_handler(std::move(output));
-			});
-			std::cerr << "timer started\n";
-		}
-
-	private:
-
-		boost::asio::steady_timer m_timer;
-		boost::asio::steady_timer::duration m_amount;
-		buildserver::process_result m_output;
 	};
 
 	void run_experiment()
@@ -154,7 +192,7 @@ int main()
 	root.edges.emplace_back(Si::make_unique<buildserver::dag_node>(root.value));
 	root.edges.emplace_back(Si::make_unique<buildserver::dag_node>([&io](buildserver::process_result const &input)
 	{
-		return Si::make_unique<delay>(io, std::chrono::milliseconds(30), input);
+		return Si::make_unique<buildserver::delay>(io, std::chrono::milliseconds(30), input);
 	}));
 	root.edges.emplace_back(Si::make_unique<buildserver::dag_node>(root.value));
 	handle_input(root, {});
