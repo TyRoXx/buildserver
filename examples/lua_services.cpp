@@ -2,9 +2,94 @@
 #include <luacpp/register_any_function.hpp>
 #include <luacpp/load.hpp>
 #include <boost/range/algorithm/equal.hpp>
+#include <boost/asio/steady_timer.hpp>
+
+namespace buildserver
+{
+	struct process_result
+	{
+
+	};
+
+	struct process
+	{
+		virtual ~process()
+		{
+		}
+		virtual void async_get_result(std::function<void (process_result)> result_handler) = 0;
+	};
+
+	typedef std::function<std::unique_ptr<process> (process_result const &)> step;
+
+	struct dag_node
+	{
+		step value;
+		std::vector<std::unique_ptr<dag_node>> edges;
+
+		dag_node()
+		{
+		}
+
+		explicit dag_node(step value)
+			: value(std::move(value))
+		{
+		}
+	};
+}
 
 namespace
 {
+	struct step_a : buildserver::process
+	{
+		explicit step_a(boost::asio::io_service &io, buildserver::process_result input)
+			: m_io(&io)
+			, m_input(std::move(input))
+		{
+		}
+
+		virtual void async_get_result(std::function<void (buildserver::process_result)> result_handler) SILICIUM_OVERRIDE
+		{
+			std::cerr << "Step A\n";
+			m_io->post([result_handler]()
+			{
+				result_handler(buildserver::process_result{});
+			});
+		}
+
+	private:
+
+		boost::asio::io_service *m_io;
+		buildserver::process_result m_input;
+	};
+
+	struct delay : buildserver::process
+	{
+		explicit delay(boost::asio::io_service &io, boost::asio::steady_timer::duration amount, buildserver::process_result output)
+			: m_timer(io)
+			, m_amount(amount)
+			, m_output(std::move(output))
+		{
+		}
+
+		virtual void async_get_result(std::function<void (buildserver::process_result)> result_handler) SILICIUM_OVERRIDE
+		{
+			m_timer.expires_from_now(m_amount);
+			m_timer.async_wait([result_handler, output = std::move(this->m_output)](boost::system::error_code ec) mutable
+			{
+				assert(!ec); //TODO
+				std::cerr << "timer elapsed\n";
+				result_handler(std::move(output));
+			});
+			std::cerr << "timer started\n";
+		}
+
+	private:
+
+		boost::asio::steady_timer m_timer;
+		boost::asio::steady_timer::duration m_amount;
+		buildserver::process_result m_output;
+	};
+
 	void run_experiment()
 	{
 		auto lua_state = lua::create_lua();
@@ -36,13 +121,45 @@ namespace
 		script_main.release();
 		require.release();
 		lua::stack_array main_results = lua::pcall(*lua_state, 1, 1);
-
 	}
+}
+
+void handle_input(buildserver::dag_node const &start, buildserver::process_result const &input)
+{
+	std::unique_ptr<buildserver::process> started = start.value(input);
+	if (!started)
+	{
+		std::cerr << "input ignored\n";
+		return;
+	}
+	std::shared_ptr<buildserver::process> started_copyable(std::move(started));
+	started_copyable->async_get_result([&start, started_copyable](buildserver::process_result result)
+	{
+		std::cerr << "got result\n";
+		for (auto const &next : start.edges)
+		{
+			handle_input(*next, result);
+		}
+	});
 }
 
 int main()
 {
 	boost::asio::io_service io;
+	buildserver::dag_node root;
+	root.value = [&io](buildserver::process_result const &input) -> std::unique_ptr<buildserver::process>
+	{
+		return Si::make_unique<step_a>(io, input);
+	};
+	root.edges.emplace_back(Si::make_unique<buildserver::dag_node>(root.value));
+	root.edges.emplace_back(Si::make_unique<buildserver::dag_node>([&io](buildserver::process_result const &input)
+	{
+		return Si::make_unique<delay>(io, std::chrono::milliseconds(30), input);
+	}));
+	root.edges.emplace_back(Si::make_unique<buildserver::dag_node>(root.value));
+	handle_input(root, {});
+
+	io.run();
 
 	try
 	{
