@@ -19,7 +19,7 @@ namespace buildserver
 	}
 #endif
 
-	Si::error_or<boost::optional<boost::filesystem::path>> find_cmake()
+	Si::error_or<Si::optional<boost::filesystem::path>> find_cmake()
 	{
 #ifdef _WIN32
 		wchar_t *programs = nullptr;

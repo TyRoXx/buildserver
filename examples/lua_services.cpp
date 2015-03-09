@@ -82,7 +82,12 @@ namespace buildserver
 		virtual void async_get_result(std::function<void (process_result)> result_handler) SILICIUM_OVERRIDE
 		{
 			m_timer.expires_from_now(m_amount);
-			m_timer.async_wait([result_handler, output = std::move(this->m_output)](boost::system::error_code ec) mutable
+			auto &output = m_output;
+			m_timer.async_wait([result_handler, output
+#if SILICIUM_COMPILER_HAS_EXTENDED_CAPTURE
+				= std::move(output)
+#endif
+			](boost::system::error_code ec) mutable
 			{
 				if (!ec)
 				{

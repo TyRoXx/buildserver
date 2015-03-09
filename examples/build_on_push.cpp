@@ -14,6 +14,7 @@
 #include <silicium/observable/while.hpp>
 #include <silicium/observable/thread.hpp>
 #include <silicium/open.hpp>
+#include <silicium/fast_variant.hpp>
 #include <silicium/sink/iterator_sink.hpp>
 #include <silicium/http/generate_response.hpp>
 #include <silicium/std_threading.hpp>
@@ -335,7 +336,7 @@ namespace
 		return std::move(result);
 	}
 
-	Si::error_or<boost::optional<boost::filesystem::path>> find_git()
+	Si::error_or<Si::optional<boost::filesystem::path>> find_git()
 	{
 #ifdef _WIN32
 		return buildserver::find_file_in_directories("git.exe", {"C:\\Program Files (x86)\\Git\\bin"});
@@ -425,14 +426,14 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	boost::optional<boost::filesystem::path> maybe_git = find_git().get();
+	Si::optional<boost::filesystem::path> maybe_git = find_git().get();
 	if (!maybe_git)
 	{
 		std::cerr << "Could not find Git\n";
 		return 1;
 	}
 
-	boost::optional<boost::filesystem::path> maybe_cmake = buildserver::find_cmake().get();
+	Si::optional<boost::filesystem::path> maybe_cmake = buildserver::find_cmake().get();
 	if (!maybe_cmake)
 	{
 		std::cerr << "Could not find CMake\n";

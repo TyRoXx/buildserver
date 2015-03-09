@@ -16,11 +16,11 @@
 
 BOOST_AUTO_TEST_CASE(find_executable_unix_test)
 {
-	BOOST_CHECK_EQUAL(boost::none, buildserver::find_executable_unix("does-not-exist", {}));
+	BOOST_CHECK_EQUAL(Si::none, buildserver::find_executable_unix("does-not-exist", {}));
 
 #ifndef _WIN32
 	BOOST_CHECK_EQUAL(boost::filesystem::path("/bin/sh"), buildserver::find_executable_unix("sh", {}));
-	BOOST_CHECK_EQUAL(boost::none, buildserver::find_file_in_directories("sh", {}));
+	BOOST_CHECK_EQUAL(Si::none, buildserver::find_file_in_directories("sh", {}));
 
 	auto gnuc = buildserver::find_gcc_unix();
 	BOOST_REQUIRE(gnuc.get());

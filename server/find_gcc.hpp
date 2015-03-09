@@ -11,7 +11,7 @@ namespace buildserver
 		boost::filesystem::path gcc, gxx;
 	};
 
-	Si::error_or<boost::optional<gcc_location>> find_gcc_unix();
+	Si::error_or<Si::optional<gcc_location>> find_gcc_unix();
 }
 
 #endif

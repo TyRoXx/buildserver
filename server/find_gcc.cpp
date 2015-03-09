@@ -3,7 +3,7 @@
 
 namespace buildserver
 {
-	Si::error_or<boost::optional<gcc_location>> find_gcc_unix()
+	Si::error_or<Si::optional<gcc_location>> find_gcc_unix()
 	{
 		auto gcc = find_executable_unix("gcc", {});
 		if (gcc.is_error())
@@ -12,10 +12,10 @@ namespace buildserver
 		}
 		if (!gcc.get())
 		{
-			return boost::none;
+			return Si::none;
 		}
 		auto gxx = find_file_in_directories("g++", {gcc.get()->parent_path()});
-		return Si::map(std::move(gxx), [&gcc](boost::optional<boost::filesystem::path> gxx_path) -> boost::optional<gcc_location>
+		return Si::map(std::move(gxx), [&gcc](Si::optional<boost::filesystem::path> gxx_path) -> Si::optional<gcc_location>
 		{
 			if (gxx_path)
 			{
@@ -26,7 +26,7 @@ namespace buildserver
 			}
 			else
 			{
-				return boost::none;
+				return Si::none;
 			}
 		});
 	}

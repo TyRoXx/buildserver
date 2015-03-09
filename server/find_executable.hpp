@@ -8,11 +8,11 @@
 namespace buildserver
 {
 
-	Si::error_or<boost::optional<boost::filesystem::path>> find_file_in_directories(
+	Si::error_or<Si::optional<boost::filesystem::path>> find_file_in_directories(
 		boost::filesystem::path const &filename,
 		std::vector<boost::filesystem::path> const &directories);
 
-	Si::error_or<boost::optional<boost::filesystem::path>> find_executable_unix(
+	Si::error_or<Si::optional<boost::filesystem::path>> find_executable_unix(
 		boost::filesystem::path const &filename,
 		std::vector<boost::filesystem::path> additional_directories);
 }
