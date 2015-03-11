@@ -345,12 +345,8 @@ namespace
 #endif
 	}
 
-	void git_clone(std::string const &repository, boost::filesystem::path const &destination, boost::filesystem::path const &git_exe)
+	int run_process(Si::async_process_parameters const &parameters)
 	{
-		Si::async_process_parameters parameters;
-		parameters.executable = git_exe;
-		parameters.current_path = destination.parent_path();
-		parameters.arguments = {"clone", repository, destination.string()};
 		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
 		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::open_reading("/dev/null").get());
 		Si::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::launch_process(
@@ -383,9 +379,37 @@ namespace
 		standard_output_and_error.write.close();
 		io.run();
 		int exit_code = process.wait_for_exit().get();
+		return exit_code;
+	}
+
+	void git_clone(std::string const &repository, boost::filesystem::path const &destination, boost::filesystem::path const &git_exe)
+	{
+		Si::async_process_parameters parameters;
+		parameters.executable = git_exe;
+		parameters.current_path = destination.parent_path();
+		parameters.arguments = {"clone", repository, destination.string()};
+		int exit_code = run_process(parameters);
 		if (exit_code != 0)
 		{
 			throw std::runtime_error("git-clone failed");
+		}
+	}
+
+	build_result run_test(boost::filesystem::path const &build_dir)
+	{
+		boost::filesystem::path const test_dir = build_dir / "test";
+		boost::filesystem::path const test_exe = test_dir / "unit_test";
+		Si::async_process_parameters parameters;
+		parameters.executable = test_exe;
+		parameters.current_path = test_dir;
+		int exit_code = run_process(parameters);
+		if (exit_code == 0)
+		{
+			return build_result::success;
+		}
+		else
+		{
+			return build_result::failure;
 		}
 	}
 
@@ -414,7 +438,7 @@ namespace
 			boost::throw_exception(boost::system::system_error(error));
 		}
 
-		return build_result::success;
+		return run_test(build);
 	}
 }
 
