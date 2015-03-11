@@ -12,19 +12,19 @@ namespace buildserver
 
 
 	cmake_exe::cmake_exe(
-		boost::filesystem::path exe)
+		Si::absolute_path exe)
 		: m_exe(std::move(exe))
 	{
 	}
 
 	boost::system::error_code cmake_exe::generate(
-		boost::filesystem::path const &source,
-		boost::filesystem::path const &build,
+		Si::absolute_path const &source,
+		Si::absolute_path const &build,
 		boost::unordered_map<std::string, std::string> const &definitions
 	) const
 	{
 		std::vector<std::string> arguments;
-		arguments.emplace_back(source.string());
+		arguments.emplace_back(source.c_str());
 		for (auto const &definition : definitions)
 		{
 			//TODO: is this properly encoded in all cases? I guess not
@@ -32,8 +32,8 @@ namespace buildserver
 			arguments.emplace_back(std::move(encoded));
 		}
 		Si::process_parameters parameters;
-		parameters.executable = m_exe;
-		parameters.current_path = build;
+		parameters.executable = m_exe.to_boost_path();
+		parameters.current_path = build.to_boost_path();
 		parameters.arguments = std::move(arguments);
 		int const rc = Si::run_process(parameters);
 		if (rc != 0)
@@ -44,7 +44,7 @@ namespace buildserver
 	}
 
 	boost::system::error_code cmake_exe::build(
-		boost::filesystem::path const &build,
+		Si::absolute_path const &build,
 		unsigned cpu_parallelism
 	) const
 	{
@@ -55,8 +55,8 @@ namespace buildserver
 #endif
 		};
 		Si::process_parameters parameters;
-		parameters.executable = m_exe;
-		parameters.current_path = build;
+		parameters.executable = m_exe.to_boost_path();
+		parameters.current_path = build.to_boost_path();
 		parameters.arguments = std::move(arguments);
 		int const rc = Si::run_process(parameters);
 		if (rc != 0)

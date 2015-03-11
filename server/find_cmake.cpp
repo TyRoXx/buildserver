@@ -19,7 +19,7 @@ namespace buildserver
 	}
 #endif
 
-	Si::error_or<Si::optional<boost::filesystem::path>> find_cmake()
+	Si::error_or<Si::optional<Si::absolute_path>> find_cmake()
 	{
 #ifdef _WIN32
 		wchar_t *programs = nullptr;
@@ -34,7 +34,7 @@ namespace buildserver
 			programs_path / "CMake 2.8/bin"
 		});
 #else
-		return find_executable_unix("cmake", {});
+		return find_executable_unix(*Si::path_segment::create("cmake"), {});
 #endif
 	}
 }

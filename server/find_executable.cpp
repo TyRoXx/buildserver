@@ -5,10 +5,10 @@ namespace buildserver
 {
 	namespace
 	{
-		Si::error_or<bool> file_exists(boost::filesystem::path const &candidate)
+		Si::error_or<bool> file_exists(Si::absolute_path const &candidate)
 		{
 			boost::system::error_code ec;
-			boost::filesystem::file_status status = boost::filesystem::status(candidate, ec);
+			boost::filesystem::file_status status = boost::filesystem::status(candidate.to_boost_path(), ec);
 			if (status.type() == boost::filesystem::file_not_found)
 			{
 				return false;
@@ -21,9 +21,9 @@ namespace buildserver
 		}
 	}
 
-	Si::error_or<Si::optional<boost::filesystem::path>> find_file_in_directories(
-		boost::filesystem::path const &filename,
-		std::vector<boost::filesystem::path> const &directories)
+	Si::error_or<Si::optional<Si::absolute_path>> find_file_in_directories(
+		Si::path_segment const &filename,
+		std::vector<Si::absolute_path> const &directories)
 	{
 		for (auto const &directory : directories)
 		{
@@ -41,13 +41,13 @@ namespace buildserver
 		return Si::none;
 	}
 
-	Si::error_or<Si::optional<boost::filesystem::path>> find_executable_unix(
-		boost::filesystem::path const &filename,
-		std::vector<boost::filesystem::path> additional_directories)
+	Si::error_or<Si::optional<Si::absolute_path>> find_executable_unix(
+		Si::path_segment const &filename,
+		std::vector<Si::absolute_path> additional_directories)
 	{
-		additional_directories.emplace_back("/bin");
-		additional_directories.emplace_back("/usr/bin");
-		additional_directories.emplace_back("/usr/local/bin");
+		additional_directories.emplace_back(*Si::absolute_path::create("/bin"));
+		additional_directories.emplace_back(*Si::absolute_path::create("/usr/bin"));
+		additional_directories.emplace_back(*Si::absolute_path::create("/usr/local/bin"));
 		return find_file_in_directories(filename, additional_directories);
 	}
 }

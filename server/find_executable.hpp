@@ -2,19 +2,19 @@
 #define BUILDSERVER_FIND_EXECUTABLE_HPP
 
 #include <silicium/error_or.hpp>
-#include <boost/filesystem/path.hpp>
+#include <silicium/path_segment.hpp>
 #include <vector>
 
 namespace buildserver
 {
 
-	Si::error_or<Si::optional<boost::filesystem::path>> find_file_in_directories(
-		boost::filesystem::path const &filename,
-		std::vector<boost::filesystem::path> const &directories);
+	Si::error_or<Si::optional<Si::absolute_path>> find_file_in_directories(
+		Si::path_segment const &filename,
+		std::vector<Si::absolute_path> const &directories);
 
-	Si::error_or<Si::optional<boost::filesystem::path>> find_executable_unix(
-		boost::filesystem::path const &filename,
-		std::vector<boost::filesystem::path> additional_directories);
+	Si::error_or<Si::optional<Si::absolute_path>> find_executable_unix(
+		Si::path_segment const &filename,
+		std::vector<Si::absolute_path> additional_directories);
 }
 
 #endif

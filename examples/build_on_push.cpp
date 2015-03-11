@@ -22,11 +22,12 @@
 #include <silicium/range_value.hpp>
 #include <silicium/html.hpp>
 #include <silicium/async_process.hpp>
+#include <silicium/absolute_path.hpp>
+#include <silicium/path_segment.hpp>
 #include <boost/program_options.hpp>
 #include <boost/optional.hpp>
 #include <boost/range/algorithm/equal.hpp>
 #include <boost/thread.hpp>
-#include <boost/filesystem/operations.hpp>
 #include <unordered_map>
 #include <functional>
 #include <iostream>
@@ -273,10 +274,10 @@ namespace
 
 	struct options
 	{
-		std::string repository;
+		Si::noexcept_string repository;
 		boost::uint16_t port;
 		Si::noexcept_string secret;
-		boost::filesystem::path workspace;
+		Si::absolute_path workspace;
 	};
 
 	boost::optional<options> parse_options(int argc, char **argv)
@@ -336,12 +337,12 @@ namespace
 		return std::move(result);
 	}
 
-	Si::error_or<Si::optional<boost::filesystem::path>> find_git()
+	Si::error_or<Si::optional<Si::absolute_path>> find_git()
 	{
 #ifdef _WIN32
 		return buildserver::find_file_in_directories("git.exe", {"C:\\Program Files (x86)\\Git\\bin"});
 #else
-		return buildserver::find_executable_unix("git", {});
+		return buildserver::find_executable_unix(*Si::path_segment::create("git"), {});
 #endif
 	}
 
@@ -382,12 +383,12 @@ namespace
 		return exit_code;
 	}
 
-	void git_clone(std::string const &repository, boost::filesystem::path const &destination, boost::filesystem::path const &git_exe)
+	void git_clone(Si::noexcept_string const &repository, Si::absolute_path const &destination, Si::path_segment const &clone_name, Si::absolute_path const &git_exe)
 	{
 		Si::async_process_parameters parameters;
 		parameters.executable = git_exe;
-		parameters.current_path = destination.parent_path();
-		parameters.arguments = {"clone", repository, destination.string()};
+		parameters.current_path = destination;
+		parameters.arguments = {"clone", repository, (destination / clone_name).underlying()};
 		int exit_code = run_process(parameters);
 		if (exit_code != 0)
 		{
@@ -395,10 +396,10 @@ namespace
 		}
 	}
 
-	build_result run_test(boost::filesystem::path const &build_dir)
+	build_result run_test(Si::absolute_path const &build_dir)
 	{
-		boost::filesystem::path const test_dir = build_dir / "test";
-		boost::filesystem::path const test_exe = test_dir / "unit_test";
+		Si::absolute_path const test_dir = build_dir / "test";
+		Si::absolute_path const test_exe = test_dir / "unit_test";
 		Si::async_process_parameters parameters;
 		parameters.executable = test_exe;
 		parameters.current_path = test_dir;
@@ -414,16 +415,17 @@ namespace
 	}
 
 	build_result build(
-		std::string const &repository,
-		boost::filesystem::path const &workspace,
-		boost::filesystem::path const &git,
-		boost::filesystem::path const &cmake)
+		Si::noexcept_string const &repository,
+		Si::absolute_path const &workspace,
+		Si::absolute_path const &git,
+		Si::absolute_path const &cmake)
 	{
-		boost::filesystem::path const source = workspace / "source.git";
-		git_clone(repository, source, git);
+		Si::path_segment const clone_name = *Si::path_segment::create("source.git");
+		git_clone(repository, workspace, clone_name, git);
+		Si::absolute_path const source = workspace / clone_name;
 
-		boost::filesystem::path const build = workspace / "build";
-		boost::filesystem::create_directories(build);
+		Si::absolute_path const build = workspace / "build";
+		boost::filesystem::create_directories(build.to_boost_path());
 
 		buildserver::cmake_exe cmake_builder(cmake);
 		boost::system::error_code error = cmake_builder.generate(source, build, boost::unordered_map<std::string, std::string>{});
@@ -450,14 +452,14 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	Si::optional<boost::filesystem::path> maybe_git = find_git().get();
+	Si::optional<Si::absolute_path> maybe_git = find_git().get();
 	if (!maybe_git)
 	{
 		std::cerr << "Could not find Git\n";
 		return 1;
 	}
 
-	Si::optional<boost::filesystem::path> maybe_cmake = buildserver::find_cmake().get();
+	Si::optional<Si::absolute_path> maybe_cmake = buildserver::find_cmake().get();
 	if (!maybe_cmake)
 	{
 		std::cerr << "Could not find CMake\n";
@@ -498,8 +500,8 @@ int main(int argc, char **argv)
 						io,
 						Si::make_thread_observable<Si::std_threading>([&]()
 						{
-							boost::filesystem::remove_all(parsed_options->workspace);
-							boost::filesystem::create_directories(parsed_options->workspace);
+							boost::filesystem::remove_all(parsed_options->workspace.to_boost_path());
+							boost::filesystem::create_directories(parsed_options->workspace.to_boost_path());
 							return build(parsed_options->repository, parsed_options->workspace, *maybe_git, *maybe_cmake);
 						})
 					)
