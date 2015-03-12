@@ -340,7 +340,10 @@ namespace
 	Si::error_or<Si::optional<Si::absolute_path>> find_git()
 	{
 #ifdef _WIN32
-		return buildserver::find_file_in_directories("git.exe", {"C:\\Program Files (x86)\\Git\\bin"});
+		return buildserver::find_file_in_directories(
+			*Si::path_segment::create("git.exe"),
+			{*Si::absolute_path::create("C:\\Program Files (x86)\\Git\\bin")}
+		);
 #else
 		return buildserver::find_executable_unix(*Si::path_segment::create("git"), {});
 #endif
@@ -388,7 +391,9 @@ namespace
 		Si::async_process_parameters parameters;
 		parameters.executable = git_exe;
 		parameters.current_path = destination;
-		parameters.arguments = {"clone", repository, (destination / clone_name).underlying()};
+		parameters.arguments.emplace_back("clone");
+		parameters.arguments.emplace_back(repository);
+		parameters.arguments.emplace_back((destination / clone_name).to_boost_path().string());
 		int exit_code = run_process(parameters);
 		if (exit_code != 0)
 		{

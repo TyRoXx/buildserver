@@ -24,7 +24,7 @@ namespace buildserver
 	) const
 	{
 		std::vector<std::string> arguments;
-		arguments.emplace_back(source.c_str());
+		arguments.emplace_back(source.to_boost_path().string().c_str());
 		for (auto const &definition : definitions)
 		{
 			//TODO: is this properly encoded in all cases? I guess not

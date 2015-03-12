@@ -3,6 +3,7 @@
 
 namespace buildserver
 {
+#ifndef _WIN32
 	Si::error_or<Si::optional<gcc_location>> find_gcc_unix()
 	{
 		auto gcc = find_executable_unix(*Si::path_segment::create("gcc"), {});
@@ -35,4 +36,5 @@ namespace buildserver
 			}
 		);
 	}
+#endif
 }

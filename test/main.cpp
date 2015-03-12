@@ -14,11 +14,11 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/thread/thread.hpp>
 
+#ifndef _WIN32
 BOOST_AUTO_TEST_CASE(find_executable_unix_test)
 {
 	BOOST_CHECK_EQUAL(Si::none, buildserver::find_executable_unix(*Si::path_segment::create("does-not-exist"), {}));
 
-#ifndef _WIN32
 	BOOST_CHECK_EQUAL(Si::absolute_path::create("/bin/sh"), buildserver::find_executable_unix(*Si::path_segment::create("sh"), {}));
 	BOOST_CHECK_EQUAL(Si::none, buildserver::find_file_in_directories(*Si::path_segment::create("sh"), {}));
 
@@ -26,8 +26,8 @@ BOOST_AUTO_TEST_CASE(find_executable_unix_test)
 	BOOST_REQUIRE(gnuc.get());
 	BOOST_CHECK_EQUAL("/usr/bin/gcc", gnuc.get()->gcc);
 	BOOST_CHECK_EQUAL("/usr/bin/g++", gnuc.get()->gxx);
-#endif
 }
+#endif
 
 BOOST_AUTO_TEST_CASE(cmake_exe_test)
 {

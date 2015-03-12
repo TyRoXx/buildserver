@@ -11,7 +11,9 @@ namespace buildserver
 		Si::absolute_path gcc, gxx;
 	};
 
+#ifndef _WIN32
 	Si::error_or<Si::optional<gcc_location>> find_gcc_unix();
+#endif
 }
 
 #endif

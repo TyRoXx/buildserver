@@ -28,10 +28,15 @@ namespace buildserver
 			throw std::logic_error("COM error handling to do");
 		}
 		std::unique_ptr<wchar_t, com_deleter> free_programs(programs);
-		boost::filesystem::path const programs_path = programs;
-		return find_file_in_directories("cmake.exe", {
-			programs_path / "CMake/bin",
-			programs_path / "CMake 2.8/bin"
+		Si::optional<Si::absolute_path> const programs_path = Si::absolute_path::create(programs);
+		if (!programs_path)
+		{
+			return Si::none;
+		}
+		return find_file_in_directories(
+			*Si::path_segment::create("cmake.exe"), {
+			*programs_path / Si::relative_path("CMake/bin"),
+			*programs_path / Si::relative_path("CMake 2.8/bin")
 		});
 #else
 		return find_executable_unix(*Si::path_segment::create("cmake"), {});
