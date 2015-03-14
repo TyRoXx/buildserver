@@ -393,7 +393,7 @@ namespace
 		parameters.current_path = destination;
 		parameters.arguments.emplace_back("clone");
 		parameters.arguments.emplace_back(repository);
-		parameters.arguments.emplace_back((destination / clone_name).to_boost_path().string());
+		parameters.arguments.emplace_back((destination / clone_name).c_str());
 		int exit_code = run_process(parameters);
 		if (exit_code != 0)
 		{
