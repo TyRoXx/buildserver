@@ -240,6 +240,7 @@ namespace
 							{
 								doc.write(overview.is_building ? "building.." : "idle");
 							});
+							doc("hr");
 							if (overview.last_result)
 							{
 								doc("p", [&]()
