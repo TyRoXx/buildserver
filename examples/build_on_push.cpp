@@ -220,38 +220,38 @@ namespace
 				web::request_handler([&overview](boost::asio::ip::tcp::socket &client, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
 				{
 					std::vector<char> content;
-					auto html = Si::html::make_generator(Si::make_container_sink(content));
-					html.element("html", [&]()
+					auto doc = Si::html::make_generator(Si::make_container_sink(content));
+					doc("html", [&]()
 					{
-						html.element("head", [&]()
+						doc("head", [&]()
 						{
-							html.element("title", [&]()
+							doc("title", [&]()
 							{
-								html.write("buildserver overview");
+								doc.write("buildserver overview");
 							});
 						});
-						html.element("body", [&]()
+						doc("body", [&]()
 						{
-							html.element("h1", [&]()
+							doc("h1", [&]()
 							{
-								html.write("Overview");
+								doc.write("Overview");
 							});
-							html.element("p", [&]()
+							doc("p", [&]()
 							{
-								html.write(overview.is_building ? "building.." : "idle");
+								doc.write(overview.is_building ? "building.." : "idle");
 							});
 							if (overview.last_result)
 							{
-								html.element("p", [&]()
+								doc("p", [&]()
 								{
-									html.write("last build ");
+									doc.write("last build ");
 									switch (*overview.last_result)
 									{
 									case build_result::success:
-										html.write("succeeded");
+										doc.write("succeeded");
 										break;
 									case build_result::failure:
-										html.write("failed");
+										doc.write("failed");
 										break;
 									}
 								});
