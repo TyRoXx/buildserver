@@ -13,6 +13,7 @@
 #include <silicium/observable/total_consumer.hpp>
 #include <silicium/observable/while.hpp>
 #include <silicium/observable/thread.hpp>
+#include <silicium/sink/ostream_sink.hpp>
 #include <silicium/open.hpp>
 #include <silicium/fast_variant.hpp>
 #include <silicium/sink/iterator_sink.hpp>
@@ -348,8 +349,8 @@ namespace
 		return buildserver::find_executable_unix(*Si::path_segment::create("git"), {});
 #endif
 	}
-
-	int run_process(Si::async_process_parameters const &parameters)
+	
+	int run_process(Si::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
 	{
 		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
 		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::open_reading("/dev/null").get());
@@ -360,33 +361,14 @@ namespace
 			standard_output_and_error.write.handle
 		).get());
 		boost::asio::io_service io;
-		Si::spawn_observable(
-			Si::while_(
-				Si::transform(
-					Si::process_output(Si::to_unique(Si::make_asio_file_stream<Si::process_output::stream>(io, std::move(standard_output_and_error.read)))),
-					[](Si::error_or<Si::memory_range> element)
-					{
-						if (element.is_error())
-						{
-							return false;
-						}
-						else
-						{
-							std::cerr.write(element->begin(), element->size());
-							return true;
-						}
-					}
-				),
-				[](bool v) { return v; }
-			)
-		);
+		Si::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output), standard_output_and_error.read.handle);
 		standard_output_and_error.write.close();
 		io.run();
 		int exit_code = process.wait_for_exit().get();
 		return exit_code;
 	}
 
-	void git_clone(Si::os_string const &repository, Si::absolute_path const &destination, Si::path_segment const &clone_name, Si::absolute_path const &git_exe)
+	void git_clone(Si::os_string const &repository, Si::absolute_path const &destination, Si::path_segment const &clone_name, Si::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
 	{
 		Si::async_process_parameters parameters;
 		parameters.executable = git_exe;
@@ -394,21 +376,21 @@ namespace
 		parameters.arguments.emplace_back(Si::to_os_string("clone"));
 		parameters.arguments.emplace_back(repository);
 		parameters.arguments.emplace_back((destination / clone_name).c_str());
-		int exit_code = run_process(parameters);
+		int exit_code = run_process(parameters, output);
 		if (exit_code != 0)
 		{
 			throw std::runtime_error("git-clone failed");
 		}
 	}
 
-	build_result run_test(Si::absolute_path const &build_dir)
+	build_result run_test(Si::absolute_path const &build_dir, Si::sink<char, Si::success> &output)
 	{
 		Si::absolute_path const test_dir = build_dir / "test";
 		Si::absolute_path const test_exe = test_dir / "unit_test";
 		Si::async_process_parameters parameters;
 		parameters.executable = test_exe;
 		parameters.current_path = test_dir;
-		int exit_code = run_process(parameters);
+		int exit_code = run_process(parameters, output);
 		if (exit_code == 0)
 		{
 			return build_result::success;
@@ -423,29 +405,30 @@ namespace
 		Si::os_string const &repository,
 		Si::absolute_path const &workspace,
 		Si::absolute_path const &git,
-		Si::absolute_path const &cmake)
+		Si::absolute_path const &cmake,
+		Si::sink<char, Si::success> &output)
 	{
 		Si::path_segment const clone_name = *Si::path_segment::create("source.git");
-		git_clone(repository, workspace, clone_name, git);
+		git_clone(repository, workspace, clone_name, git, output);
 		Si::absolute_path const source = workspace / clone_name;
 
 		Si::absolute_path const build = workspace / "build";
 		boost::filesystem::create_directories(build.to_boost_path());
 
 		buildserver::cmake_exe cmake_builder(cmake);
-		boost::system::error_code error = cmake_builder.generate(source, build, boost::unordered_map<std::string, std::string>{});
+		boost::system::error_code error = cmake_builder.generate(source, build, boost::unordered_map<std::string, std::string>{}, output);
 		if (error)
 		{
 			boost::throw_exception(boost::system::system_error(error));
 		}
 
-		error = cmake_builder.build(build, boost::thread::hardware_concurrency());
+		error = cmake_builder.build(build, boost::thread::hardware_concurrency(), output);
 		if (error)
 		{
 			boost::throw_exception(boost::system::system_error(error));
 		}
 
-		return run_test(build);
+		return run_test(build, output);
 	}
 }
 
@@ -507,7 +490,8 @@ int main(int argc, char **argv)
 						{
 							boost::filesystem::remove_all(parsed_options->workspace.to_boost_path());
 							boost::filesystem::create_directories(parsed_options->workspace.to_boost_path());
-							return build(parsed_options->repository, parsed_options->workspace, *maybe_git, *maybe_cmake);
+							auto output = Si::virtualize_sink(Si::ostream_ref_sink(std::cerr));
+							return build(parsed_options->repository, parsed_options->workspace, *maybe_git, *maybe_cmake, output);
 						})
 					)
 				);

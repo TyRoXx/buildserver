@@ -38,8 +38,9 @@ BOOST_AUTO_TEST_CASE(cmake_exe_test)
 	boost::filesystem::remove_all(build_path.to_boost_path());
 	boost::filesystem::create_directories(build_path.to_boost_path());
 	Si::absolute_path const resources_path = *Si::absolute_path::create(boost::filesystem::path(__FILE__).parent_path().parent_path() / "test-resources");
-	cmake_driver.generate(resources_path / "test1", build_path, boost::unordered_map<std::string, std::string>{});
-	cmake_driver.build(build_path, boost::thread::hardware_concurrency());
+	Si::virtualized_sink<Si::null_sink<char, Si::success>> ignored;
+	cmake_driver.generate(resources_path / "test1", build_path, boost::unordered_map<std::string, std::string>{}, ignored);
+	cmake_driver.build(build_path, boost::thread::hardware_concurrency(), ignored);
 	Si::absolute_path const built_exe = build_path
 #ifdef _WIN32
 		/ "Debug"
