@@ -1,5 +1,4 @@
 #include "server/find_cmake.hpp"
-#include "server/find_gcc.hpp"
 #include "server/find_executable.hpp"
 #include "server/cmake.hpp"
 #include <silicium/http/receive_request.hpp>
