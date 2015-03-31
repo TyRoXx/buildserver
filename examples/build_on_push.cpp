@@ -1,6 +1,7 @@
 #include "nanoweb/nanoweb.hpp"
 #include "server/find_cmake.hpp"
 #include "server/find_executable.hpp"
+#include "server/find_git.hpp"
 #include "server/cmake.hpp"
 #include <silicium/asio/tcp_acceptor.hpp>
 #include <silicium/asio/writing_observable.hpp>
@@ -247,18 +248,6 @@ namespace
 
 		return std::move(result);
 	}
-
-	Si::error_or<Si::optional<Si::absolute_path>> find_git()
-	{
-#ifdef _WIN32
-		return buildserver::find_file_in_directories(
-			*Si::path_segment::create("git.exe"),
-			{*Si::absolute_path::create("C:\\Program Files (x86)\\Git\\bin")}
-		);
-#else
-		return buildserver::find_executable_unix(*Si::path_segment::create("git"), {});
-#endif
-	}
 	
 	int run_process(Si::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
 	{
@@ -350,7 +339,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	Si::optional<Si::absolute_path> maybe_git = find_git().get();
+	Si::optional<Si::absolute_path> maybe_git = buildserver::find_git().get();
 	if (!maybe_git)
 	{
 		std::cerr << "Could not find Git\n";
