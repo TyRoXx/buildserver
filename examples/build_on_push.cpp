@@ -294,7 +294,13 @@ namespace
 		boost::program_options::options_description desc("Allowed options");
 		desc.add_options()
 			("help", "produce help message")
-			("repository,r", boost::program_options::wvalue(&result.repository), "the URI for git cloning the code")
+			("repository,r", boost::program_options::
+#ifdef _WIN32
+				wvalue
+#else
+				value
+#endif
+				(&result.repository), "the URI for git cloning the code")
 			("port,p", boost::program_options::value(&result.port), "port to listen on for POSTed push notifications")
 			("secret,s", boost::program_options::value(&result.secret), "a string that needs to be in the query for the notification to be accepted")
 			("workspace,w", boost::program_options::value(&result.workspace), "")
@@ -366,7 +372,7 @@ namespace
 			standard_output_and_error.write.handle
 		).get());
 		boost::asio::io_service io;
-		Si::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output), standard_output_and_error.read.handle);
+		Si::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output), std::move(standard_output_and_error.read));
 		standard_output_and_error.write.close();
 		io.run();
 		int exit_code = process.wait_for_exit().get();
