@@ -74,8 +74,8 @@ namespace nanoweb
 		};
 	}
 
-	template <class AsyncWriteStream, class YieldContext, class Status, class StatusText>
-	void quick_final_response(AsyncWriteStream &client, YieldContext &&yield, Status &&status, StatusText &&status_text, Si::memory_range const &content)
+	template <class Socket, class YieldContext, class Status, class StatusText>
+	void quick_final_response(Socket &client, YieldContext &&yield, Status &&status, StatusText &&status_text, Si::memory_range const &content)
 	{
 		std::vector<char> response;
 		{
@@ -93,8 +93,8 @@ namespace nanoweb
 		client.shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
 	}
 
-	template <class YieldContext>
-	void serve_client(boost::asio::ip::tcp::socket &client, YieldContext &&yield, nanoweb::request_handler const &root_request_handler)
+	template <class Socket, class YieldContext>
+	void serve_client(Socket &client, YieldContext &&yield, request_handler const &root_request_handler)
 	{
 		Si::error_or<boost::optional<Si::http::request>> maybe_request = Si::http::receive_request(client, yield);
 		if (maybe_request.is_error())
