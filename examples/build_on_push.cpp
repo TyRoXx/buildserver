@@ -32,7 +32,7 @@
 #include <functional>
 #include <iostream>
 
-namespace web
+namespace nanoweb
 {
 	enum class request_handler_result
 	{
@@ -40,7 +40,12 @@ namespace web
 		not_found
 	};
 
-	typedef std::function<request_handler_result (boost::asio::ip::tcp::socket &, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context)> request_handler;
+	typedef std::function<request_handler_result (
+		boost::asio::ip::tcp::socket &,
+		Si::http::request const &,
+		Si::iterator_range<Si::memory_range const *>,
+		Si::spawn_context
+	)> request_handler;
 
 	request_handler make_directory(std::unordered_map<Si::range_value<Si::memory_range>, request_handler> entries)
 	{
@@ -68,10 +73,7 @@ namespace web
 			return entry->second(client, request, remaining_path, yield);
 		};
 	}
-}
 
-namespace
-{
 	template <class AsyncWriteStream, class YieldContext, class Status, class StatusText>
 	void quick_final_response(AsyncWriteStream &client, YieldContext &&yield, Status &&status, StatusText &&status_text, Si::memory_range const &content)
 	{
@@ -91,6 +93,43 @@ namespace
 		client.shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
 	}
 
+	template <class YieldContext>
+	void serve_client(boost::asio::ip::tcp::socket &client, YieldContext &&yield, nanoweb::request_handler const &root_request_handler)
+	{
+		Si::error_or<boost::optional<Si::http::request>> maybe_request = Si::http::receive_request(client, yield);
+		if (maybe_request.is_error())
+		{
+			std::cerr << client.remote_endpoint().address() << ": " << maybe_request.error() << '\n';
+			return;
+		}
+
+		if (!maybe_request.get())
+		{
+			return;
+		}
+
+		Si::http::request const &request = *maybe_request.get();
+
+		boost::optional<Si::http::uri> relative_uri = Si::http::parse_uri(Si::make_memory_range(request.path));
+		if (!relative_uri)
+		{
+			return;
+		}
+
+		switch (root_request_handler(client, request, Si::make_contiguous_range(relative_uri->path), yield))
+		{
+		case request_handler_result::handled:
+			break;
+
+		case request_handler_result::not_found:
+			quick_final_response(client, yield, "404", "Not Found", Si::make_c_str_range("404 - Not Found"));
+			break;
+		}
+	}
+}
+
+namespace
+{
 	struct notification
 	{
 	};
@@ -145,7 +184,7 @@ namespace
 	};
 
 	template <class YieldContext, class NotifierObserver>
-	web::request_handler_result notify(
+	nanoweb::request_handler_result notify(
 		boost::asio::ip::tcp::socket &client,
 		YieldContext &&yield,
 		Si::noexcept_string const &path,
@@ -154,48 +193,14 @@ namespace
 	{
 		if (std::string::npos == path.find(secret))
 		{
-			quick_final_response(client, yield, "403", "Forbidden", Si::make_c_str_range("the path does not contain the correct secret"));
-			return web::request_handler_result::handled;
+			nanoweb::quick_final_response(client, yield, "403", "Forbidden", Si::make_c_str_range("the path does not contain the correct secret"));
+			return nanoweb::request_handler_result::handled;
 		}
 
 		notifier.notify();
 
-		quick_final_response(client, yield, "200", "OK", Si::make_c_str_range("the server has been successfully notified"));
-		return web::request_handler_result::handled;
-	}
-
-	template <class YieldContext>
-	void serve_client(boost::asio::ip::tcp::socket &client, YieldContext &&yield, web::request_handler const &root_request_handler)
-	{
-		Si::error_or<boost::optional<Si::http::request>> maybe_request = Si::http::receive_request(client, yield);
-		if (maybe_request.is_error())
-		{
-			std::cerr << client.remote_endpoint().address() << ": " << maybe_request.error() << '\n';
-			return;
-		}
-
-		if (!maybe_request.get())
-		{
-			return;
-		}
-
-		Si::http::request const &request = *maybe_request.get();
-
-		boost::optional<Si::http::uri> relative_uri = Si::http::parse_uri(Si::make_memory_range(request.path));
-		if (!relative_uri)
-		{
-			return;
-		}
-
-		switch (root_request_handler(client, request, Si::make_contiguous_range(relative_uri->path), yield))
-		{
-		case web::request_handler_result::handled:
-			break;
-
-		case web::request_handler_result::not_found:
-			quick_final_response(client, yield, "404", "Not Found", Si::make_c_str_range("404 - Not Found"));
-			break;
-		}
+		nanoweb::quick_final_response(client, yield, "200", "OK", Si::make_c_str_range("the server has been successfully notified"));
+		return nanoweb::request_handler_result::handled;
 	}
 
 	enum class build_result
@@ -211,12 +216,12 @@ namespace
 	};
 
 	template <class NotifierObserver>
-	web::request_handler make_root_request_handler(Si::noexcept_string const &secret, saturating_notifier<NotifierObserver> &notifier, overview_state const &overview)
+	nanoweb::request_handler make_root_request_handler(Si::noexcept_string const &secret, saturating_notifier<NotifierObserver> &notifier, overview_state const &overview)
 	{
-		auto handle_request = web::make_directory({
+		auto handle_request = nanoweb::make_directory({
 			{
 				Si::make_c_str_range(""),
-				web::request_handler([&overview](boost::asio::ip::tcp::socket &client, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+				nanoweb::request_handler([&overview](boost::asio::ip::tcp::socket &client, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
 				{
 					std::vector<char> content;
 					auto doc = Si::html::make_generator(Si::make_container_sink(content));
@@ -258,13 +263,13 @@ namespace
 							}
 						});
 					});
-					quick_final_response(client, yield, "200", "OK", Si::make_memory_range(content));
-					return web::request_handler_result::handled;
+					nanoweb::quick_final_response(client, yield, "200", "OK", Si::make_memory_range(content));
+					return nanoweb::request_handler_result::handled;
 				})
 			},
 			{
 				Si::make_c_str_range("notify"),
-				web::request_handler([&secret, &notifier](boost::asio::ip::tcp::socket &client, Si::http::request const &request, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+				nanoweb::request_handler([&secret, &notifier](boost::asio::ip::tcp::socket &client, Si::http::request const &request, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
 				{
 					return notify(client, yield, request.path, secret, notifier);
 				})
@@ -461,7 +466,7 @@ int main(int argc, char **argv)
 		saturating_notifier<Si::erased_observer<notification>> notifier;
 		overview_state overview;
 
-		web::request_handler root_request_handler = make_root_request_handler(parsed_options->secret, notifier, overview);
+		nanoweb::request_handler root_request_handler = make_root_request_handler(parsed_options->secret, notifier, overview);
 		Si::spawn_observable(Si::transform(
 			Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port))),
 			[&root_request_handler](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
