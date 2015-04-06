@@ -115,6 +115,50 @@ namespace
 		boost::optional<build_result> last_result;
 	};
 
+	template <class CharSink>
+	void render_overview_page(CharSink &&rendered, overview_state const &overview)
+	{
+		auto doc = Si::html::make_generator(std::forward<CharSink>(rendered));
+		doc("html", [&]()
+		{
+			doc("head", [&]()
+			{
+				doc("title", [&]()
+				{
+					doc.write("buildserver overview");
+				});
+			});
+			doc("body", [&]()
+			{
+				doc("h1", [&]()
+				{
+					doc.write("Overview");
+				});
+				doc("p", [&]()
+				{
+					doc.write(overview.is_building ? "building.." : "idle");
+				});
+				doc("hr");
+				if (overview.last_result)
+				{
+					doc("p", [&]()
+					{
+						doc.write("last build ");
+						switch (*overview.last_result)
+						{
+						case build_result::success:
+							doc.write("succeeded");
+							break;
+						case build_result::failure:
+							doc.write("failed");
+							break;
+						}
+					});
+				}
+			});
+		});
+	}
+
 	template <class NotifierObserver>
 	nanoweb::request_handler make_root_request_handler(Si::noexcept_string const &secret, saturating_notifier<NotifierObserver> &notifier, overview_state const &overview)
 	{
@@ -124,45 +168,7 @@ namespace
 				nanoweb::request_handler([&overview](boost::asio::ip::tcp::socket &client, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
 				{
 					std::vector<char> content;
-					auto doc = Si::html::make_generator(Si::make_container_sink(content));
-					doc("html", [&]()
-					{
-						doc("head", [&]()
-						{
-							doc("title", [&]()
-							{
-								doc.write("buildserver overview");
-							});
-						});
-						doc("body", [&]()
-						{
-							doc("h1", [&]()
-							{
-								doc.write("Overview");
-							});
-							doc("p", [&]()
-							{
-								doc.write(overview.is_building ? "building.." : "idle");
-							});
-							doc("hr");
-							if (overview.last_result)
-							{
-								doc("p", [&]()
-								{
-									doc.write("last build ");
-									switch (*overview.last_result)
-									{
-									case build_result::success:
-										doc.write("succeeded");
-										break;
-									case build_result::failure:
-										doc.write("failed");
-										break;
-									}
-								});
-							}
-						});
-					});
+					render_overview_page(Si::make_container_sink(content), overview);
 					nanoweb::quick_final_response(client, yield, "200", "OK", Si::make_memory_range(content));
 					return nanoweb::request_handler_result::handled;
 				})
