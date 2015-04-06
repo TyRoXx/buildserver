@@ -135,7 +135,12 @@ namespace
 				{
 					doc.write("Overview");
 				});
-				doc("table", [&]()
+				doc("table",
+					[&]()
+				{
+					doc.attribute("border", "1");
+				},
+					[&]()
 				{
 					for (auto &&step : steps)
 					{
