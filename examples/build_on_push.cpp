@@ -112,7 +112,7 @@ namespace
 	struct overview_state
 	{
 		bool is_building = false;
-		boost::optional<build_result> last_result;
+		Si::optional<build_result> last_result;
 	};
 
 	template <class CharSink>
