@@ -210,9 +210,11 @@ namespace
 		return handle_request;
 	}
 
+	typedef Si::os_string git_repository_address;
+
 	struct options
 	{
-		Si::os_string repository;
+		git_repository_address repository;
 		boost::uint16_t port;
 		Si::noexcept_string secret;
 		Si::absolute_path workspace;
@@ -299,7 +301,7 @@ namespace
 		return exit_code;
 	}
 
-	void git_clone(Si::os_string const &repository, Si::absolute_path const &destination, Si::path_segment const &clone_name, Si::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
+	void git_clone(git_repository_address const &repository, Si::absolute_path const &destination, Si::path_segment const &clone_name, Si::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
 	{
 		Si::async_process_parameters parameters;
 		parameters.executable = git_exe;
@@ -333,7 +335,7 @@ namespace
 	}
 
 	build_result build(
-		Si::os_string const &repository,
+		git_repository_address const &repository,
 		Si::absolute_path const &workspace,
 		Si::absolute_path const &git,
 		Si::absolute_path const &cmake,
