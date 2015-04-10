@@ -363,6 +363,167 @@ namespace
 
 		return run_test(build, output);
 	}
+
+	struct listing;
+
+	struct blob
+	{
+		std::vector<char> content;
+	};
+
+	struct uri
+	{
+		Si::noexcept_string value;
+	};
+
+	struct filesystem_directory_ownership
+	{
+		Si::absolute_path owned;
+	};
+
+	typedef Si::fast_variant<
+		blob,
+		std::unique_ptr<listing>,
+		uri,
+		filesystem_directory_ownership,
+		Si::absolute_path,
+		Si::path_segment,
+		std::uint32_t
+	> value;
+
+	struct listing
+	{
+		std::map<Si::noexcept_string, value> entries;
+	};
+
+	template <class T>
+	T *find_entry_of_type(listing &list, Si::noexcept_string const &key)
+	{
+		auto i = list.entries.find(key);
+		if (i == list.entries.end())
+		{
+			return nullptr;
+		}
+		return Si::try_get_ptr<T>(i->second);
+	}
+
+	struct input_type_mismatch
+	{
+	};
+}
+
+namespace example_graph
+{
+	Si::fast_variant<input_type_mismatch, value>
+	clone(value input)
+	{
+		std::unique_ptr<listing> * const input_listing = Si::try_get_ptr<std::unique_ptr<listing>>(input);
+		if (!input_listing)
+		{
+			return input_type_mismatch{};
+		}
+		uri * const repository = find_entry_of_type<uri>(**input_listing, "repository");
+		if (!repository)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const destination = find_entry_of_type<Si::absolute_path>(**input_listing, "destination");
+		if (!destination)
+		{
+			return input_type_mismatch{};
+		}
+		Si::path_segment const * const name = find_entry_of_type<Si::path_segment>(**input_listing, "name");
+		if (!name)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const git_exe = find_entry_of_type<Si::absolute_path>(**input_listing, "git");
+		if (!git_exe)
+		{
+			return input_type_mismatch{};
+		}
+		std::vector<char> output;
+		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
+		git_clone(repository->value, *destination, *name, *git_exe, output_sink);
+
+		listing results;
+		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
+		results.entries.insert(std::make_pair("destination", (*destination) / (*name)));
+		return value{Si::to_unique(std::move(results))};
+	}
+
+	Si::fast_variant<input_type_mismatch, value>
+	cmake_generate(value input)
+	{
+		std::unique_ptr<listing> * const input_listing = Si::try_get_ptr<std::unique_ptr<listing>>(input);
+		if (!input_listing)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const cmake_exe = find_entry_of_type<Si::absolute_path>(**input_listing, "cmake");
+		if (!cmake_exe)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const source = find_entry_of_type<Si::absolute_path>(**input_listing, "source");
+		if (!source)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const build = find_entry_of_type<Si::absolute_path>(**input_listing, "build");
+		if (!build)
+		{
+			return input_type_mismatch{};
+		}
+
+		buildserver::cmake_exe cmake(*cmake_exe);
+		std::vector<char> output;
+		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
+		boost::unordered_map<std::string, std::string> definitions; //TODO
+		boost::system::error_code error = cmake.generate(*source, *build, definitions, output_sink);
+		assert(!error); //TODO
+
+		listing results;
+		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
+		results.entries.insert(std::make_pair("build", *build));
+		return value{Si::to_unique(std::move(results))};
+	}
+
+	Si::fast_variant<input_type_mismatch, value>
+	cmake_build(value input)
+	{
+		std::unique_ptr<listing> * const input_listing = Si::try_get_ptr<std::unique_ptr<listing>>(input);
+		if (!input_listing)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const cmake_exe = find_entry_of_type<Si::absolute_path>(**input_listing, "cmake");
+		if (!cmake_exe)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const build = find_entry_of_type<Si::absolute_path>(**input_listing, "build");
+		if (!build)
+		{
+			return input_type_mismatch{};
+		}
+		std::uint32_t const * const parallelism = find_entry_of_type<std::uint32_t>(**input_listing, "parallelism");
+		if (!parallelism)
+		{
+			return input_type_mismatch{};
+		}
+
+		buildserver::cmake_exe cmake(*cmake_exe);
+		std::vector<char> output;
+		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
+		boost::system::error_code error = cmake.build(*build, *parallelism, output_sink);
+		assert(!error); //TODO
+
+		listing results;
+		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
+		results.entries.insert(std::make_pair("build", *build));
+		return value{Si::to_unique(std::move(results))};
+	}
 }
 
 int main(int argc, char **argv)
