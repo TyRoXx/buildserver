@@ -383,7 +383,7 @@ namespace
 
 	typedef Si::fast_variant<
 		blob,
-		std::unique_ptr<listing>,
+		std::shared_ptr<listing>,
 		uri,
 		filesystem_directory_ownership,
 		Si::absolute_path,
@@ -449,7 +449,7 @@ namespace example_graph
 		listing results;
 		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
 		results.entries.insert(std::make_pair("destination", (*destination) / (*name)));
-		return value{Si::to_unique(std::move(results))};
+		return value{Si::to_shared(std::move(results))};
 	}
 
 	Si::fast_variant<input_type_mismatch, value>
@@ -486,7 +486,7 @@ namespace example_graph
 		listing results;
 		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
 		results.entries.insert(std::make_pair("build", *build));
-		return value{Si::to_unique(std::move(results))};
+		return value{Si::to_shared(std::move(results))};
 	}
 
 	Si::fast_variant<input_type_mismatch, value>
@@ -522,7 +522,7 @@ namespace example_graph
 		listing results;
 		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
 		results.entries.insert(std::make_pair("build", *build));
-		return value{Si::to_unique(std::move(results))};
+		return value{Si::to_shared(std::move(results))};
 	}
 }
 
