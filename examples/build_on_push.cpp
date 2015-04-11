@@ -444,7 +444,7 @@ namespace example_graph
 		}
 		std::vector<char> output;
 		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
-		git_clone(repository->value, *destination, *name, *git_exe, output_sink);
+		git_clone(Si::to_os_string(repository->value), *destination, *name, *git_exe, output_sink);
 
 		listing results;
 		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
