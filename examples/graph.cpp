@@ -301,14 +301,14 @@ namespace
 		return exit_code;
 	}
 
-	void git_clone(git_repository_address const &repository, Si::absolute_path const &destination, Si::path_segment const &clone_name, Si::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
+	void git_clone(git_repository_address const &repository, Si::absolute_path const &working_directory, Si::absolute_path const &destination, Si::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
 	{
 		Si::async_process_parameters parameters;
 		parameters.executable = git_exe;
-		parameters.current_path = destination;
+		parameters.current_path = working_directory;
 		parameters.arguments.emplace_back(Si::to_os_string("clone"));
 		parameters.arguments.emplace_back(repository);
-		parameters.arguments.emplace_back((destination / clone_name).c_str());
+		parameters.arguments.emplace_back(destination.c_str());
 		int exit_code = run_process(parameters, output);
 		if (exit_code != 0)
 		{
@@ -316,52 +316,169 @@ namespace
 		}
 	}
 
-	build_result run_test(Si::absolute_path const &build_dir, Si::sink<char, Si::success> &output)
+	struct listing;
+
+	struct blob
 	{
-		Si::absolute_path const test_dir = build_dir / "test";
-		Si::absolute_path const test_exe = test_dir / "unit_test";
-		Si::async_process_parameters parameters;
-		parameters.executable = test_exe;
-		parameters.current_path = test_dir;
-		int exit_code = run_process(parameters, output);
-		if (exit_code == 0)
+		std::vector<char> content;
+	};
+
+	struct uri
+	{
+		Si::noexcept_string value;
+	};
+
+	struct filesystem_directory_ownership
+	{
+		Si::absolute_path owned;
+	};
+
+	typedef Si::fast_variant<
+		blob,
+		std::shared_ptr<listing>,
+		uri,
+		filesystem_directory_ownership,
+		Si::absolute_path,
+		Si::path_segment,
+		std::uint32_t
+	> value;
+
+	struct listing
+	{
+		std::map<Si::noexcept_string, value> entries;
+	};
+
+	template <class T>
+	T *find_entry_of_type(listing &list, Si::noexcept_string const &key)
+	{
+		auto i = list.entries.find(key);
+		if (i == list.entries.end())
 		{
-			return build_result::success;
+			return nullptr;
 		}
-		else
-		{
-			return build_result::failure;
-		}
+		return Si::try_get_ptr<T>(i->second);
 	}
 
-	build_result build(
-		git_repository_address const &repository,
-		Si::absolute_path const &workspace,
-		Si::absolute_path const &git,
-		Si::absolute_path const &cmake,
-		Si::sink<char, Si::success> &output)
+	struct input_type_mismatch
 	{
-		Si::path_segment const clone_name = *Si::path_segment::create("source.git");
-		git_clone(repository, workspace, clone_name, git, output);
-		Si::absolute_path const source = workspace / clone_name;
+	};
 
-		Si::absolute_path const build = workspace / "build";
-		boost::filesystem::create_directories(build.to_boost_path());
+	value expect_value(Si::fast_variant<input_type_mismatch, value> maybe)
+	{
+		return Si::visit<value>(
+			maybe,
+			[](input_type_mismatch) -> value { throw std::invalid_argument("input type mismatch"); },
+			[](value &result) { return std::move(result); }
+		);
+	}
+}
 
-		buildserver::cmake_exe cmake_builder(cmake);
-		boost::system::error_code error = cmake_builder.generate(source, build, boost::unordered_map<std::string, std::string>{}, output);
-		if (error)
+namespace example_graph
+{
+	Si::fast_variant<input_type_mismatch, value>
+	clone(value input)
+	{
+		std::shared_ptr<listing> * const input_listing = Si::try_get_ptr<std::shared_ptr<listing>>(input);
+		if (!input_listing)
 		{
-			boost::throw_exception(boost::system::system_error(error));
+			return input_type_mismatch{};
+		}
+		uri * const repository = find_entry_of_type<uri>(**input_listing, "repository");
+		if (!repository)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const destination = find_entry_of_type<Si::absolute_path>(**input_listing, "destination");
+		if (!destination)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const git_exe = find_entry_of_type<Si::absolute_path>(**input_listing, "git");
+		if (!git_exe)
+		{
+			return input_type_mismatch{};
+		}
+		std::vector<char> output;
+		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
+		git_clone(Si::to_os_string(repository->value), Si::get_current_working_directory(), *destination, *git_exe, output_sink);
+
+		listing results;
+		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
+		results.entries.insert(std::make_pair("destination", *destination));
+		return value{Si::to_shared(std::move(results))};
+	}
+
+	Si::fast_variant<input_type_mismatch, value>
+	cmake_generate(value input)
+	{
+		std::shared_ptr<listing> * const input_listing = Si::try_get_ptr<std::shared_ptr<listing>>(input);
+		if (!input_listing)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const cmake_exe = find_entry_of_type<Si::absolute_path>(**input_listing, "cmake");
+		if (!cmake_exe)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const source = find_entry_of_type<Si::absolute_path>(**input_listing, "source");
+		if (!source)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const build = find_entry_of_type<Si::absolute_path>(**input_listing, "build");
+		if (!build)
+		{
+			return input_type_mismatch{};
 		}
 
-		error = cmake_builder.build(build, boost::thread::hardware_concurrency(), output);
-		if (error)
+		buildserver::cmake_exe cmake(*cmake_exe);
+		std::vector<char> output;
+		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
+		boost::unordered_map<std::string, std::string> definitions; //TODO
+		boost::system::error_code error = cmake.generate(*source, *build, definitions, output_sink);
+		assert(!error); //TODO
+
+		listing results;
+		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
+		results.entries.insert(std::make_pair("build", *build));
+		return value{Si::to_shared(std::move(results))};
+	}
+
+	Si::fast_variant<input_type_mismatch, value>
+	cmake_build(value input)
+	{
+		std::shared_ptr<listing> * const input_listing = Si::try_get_ptr<std::shared_ptr<listing>>(input);
+		if (!input_listing)
 		{
-			boost::throw_exception(boost::system::system_error(error));
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const cmake_exe = find_entry_of_type<Si::absolute_path>(**input_listing, "cmake");
+		if (!cmake_exe)
+		{
+			return input_type_mismatch{};
+		}
+		Si::absolute_path const * const build = find_entry_of_type<Si::absolute_path>(**input_listing, "build");
+		if (!build)
+		{
+			return input_type_mismatch{};
+		}
+		std::uint32_t const * const parallelism = find_entry_of_type<std::uint32_t>(**input_listing, "parallelism");
+		if (!parallelism)
+		{
+			return input_type_mismatch{};
 		}
 
-		return run_test(build, output);
+		buildserver::cmake_exe cmake(*cmake_exe);
+		std::vector<char> output;
+		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
+		boost::system::error_code error = cmake.build(*build, *parallelism, output_sink);
+		assert(!error); //TODO
+
+		listing results;
+		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
+		results.entries.insert(std::make_pair("build", *build));
+		return value{Si::to_shared(std::move(results))};
 	}
 }
 
@@ -426,12 +543,36 @@ int main(int argc, char **argv)
 				Si::optional<std::future<build_result>> maybe_result = yield.get_one(
 					Si::asio::make_posting_observable(
 					io,
-					Si::make_thread_observable<Si::std_threading>([&]()
+					Si::make_thread_observable<Si::std_threading>([&]() -> build_result
 					{
-						boost::filesystem::remove_all(parsed_options->workspace.to_boost_path());
-						boost::filesystem::create_directories(parsed_options->workspace.to_boost_path());
-						auto output = Si::virtualize_sink(Si::ostream_ref_sink(std::cerr));
-						return build(parsed_options->repository, parsed_options->workspace, *maybe_git, *maybe_cmake, output);
+						Si::absolute_path const &workspace = parsed_options->workspace;
+						boost::filesystem::remove_all(workspace.to_boost_path());
+						boost::filesystem::create_directories(workspace.to_boost_path());
+
+						Si::absolute_path const source_dir = workspace / *Si::path_segment::create("source.git");
+						Si::absolute_path const build_dir = workspace / *Si::path_segment::create("build");
+
+						listing clone_input;
+						clone_input.entries.insert(std::make_pair("repository", uri{parsed_options->repository}));
+						clone_input.entries.insert(std::make_pair("git", *maybe_git));
+						clone_input.entries.insert(std::make_pair("destination", source_dir));
+						value clone_output = expect_value(example_graph::clone(Si::to_shared(std::move(clone_input))));
+
+						boost::filesystem::create_directories(build_dir.to_boost_path());
+
+						listing generate_input;
+						generate_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
+						generate_input.entries.insert(std::make_pair("source", source_dir));
+						generate_input.entries.insert(std::make_pair("build", build_dir));
+						value generate_output = expect_value(example_graph::cmake_generate(Si::to_shared(std::move(generate_input))));
+
+						listing build_input;
+						build_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
+						build_input.entries.insert(std::make_pair("parallelism", static_cast<std::uint32_t>(4)));
+						build_input.entries.insert(std::make_pair("build", build_dir));
+						value build_output = expect_value(example_graph::cmake_build(Si::to_shared(std::move(build_input))));
+
+						return build_result::success;
 					}))
 				);
 				assert(maybe_result);
