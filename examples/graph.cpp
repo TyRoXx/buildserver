@@ -1,3 +1,4 @@
+#include "server/graph.hpp"
 #include "nanoweb/nanoweb.hpp"
 #include "server/find_cmake.hpp"
 #include "server/find_executable.hpp"
@@ -315,121 +316,65 @@ namespace
 			throw std::runtime_error("git-clone failed");
 		}
 	}
-
-	struct listing;
-
-	struct blob
-	{
-		std::vector<char> content;
-	};
-
-	struct uri
-	{
-		Si::noexcept_string value;
-	};
-
-	struct filesystem_directory_ownership
-	{
-		Si::absolute_path owned;
-	};
-
-	typedef Si::fast_variant<
-		blob,
-		std::shared_ptr<listing>,
-		uri,
-		filesystem_directory_ownership,
-		Si::absolute_path,
-		Si::path_segment,
-		std::uint32_t
-	> value;
-
-	struct listing
-	{
-		std::map<Si::noexcept_string, value> entries;
-	};
-
-	template <class T>
-	T *find_entry_of_type(listing &list, Si::noexcept_string const &key)
-	{
-		auto i = list.entries.find(key);
-		if (i == list.entries.end())
-		{
-			return nullptr;
-		}
-		return Si::try_get_ptr<T>(i->second);
-	}
-
-	struct input_type_mismatch
-	{
-	};
-
-	value expect_value(Si::fast_variant<input_type_mismatch, value> maybe)
-	{
-		return Si::visit<value>(
-			maybe,
-			[](input_type_mismatch) -> value { throw std::invalid_argument("input type mismatch"); },
-			[](value &result) { return std::move(result); }
-		);
-	}
 }
 
 namespace example_graph
 {
-	Si::fast_variant<input_type_mismatch, value>
-	clone(value input)
+	Si::fast_variant<graph::input_type_mismatch, graph::value>
+	clone(graph::value input)
 	{
-		std::shared_ptr<listing> * const input_listing = Si::try_get_ptr<std::shared_ptr<listing>>(input);
+		auto * const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
 		if (!input_listing)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
-		uri * const repository = find_entry_of_type<uri>(**input_listing, "repository");
+		auto * const repository = graph::find_entry_of_type<graph::uri>(**input_listing, "repository");
 		if (!repository)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const destination = find_entry_of_type<Si::absolute_path>(**input_listing, "destination");
+		Si::absolute_path const * const destination = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "destination");
 		if (!destination)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const git_exe = find_entry_of_type<Si::absolute_path>(**input_listing, "git");
+		Si::absolute_path const * const git_exe = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "git");
 		if (!git_exe)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
 		std::vector<char> output;
 		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
 		git_clone(Si::to_os_string(repository->value), Si::get_current_working_directory(), *destination, *git_exe, output_sink);
 
-		listing results;
-		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
+		graph::listing results;
+		results.entries.insert(std::make_pair("output", graph::blob{std::move(output)}));
 		results.entries.insert(std::make_pair("destination", *destination));
-		return value{Si::to_shared(std::move(results))};
+		return graph::value{Si::to_shared(std::move(results))};
 	}
 
-	Si::fast_variant<input_type_mismatch, value>
-	cmake_generate(value input)
+	Si::fast_variant<graph::input_type_mismatch, graph::value>
+	cmake_generate(graph::value input)
 	{
-		std::shared_ptr<listing> * const input_listing = Si::try_get_ptr<std::shared_ptr<listing>>(input);
+		auto * const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
 		if (!input_listing)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const cmake_exe = find_entry_of_type<Si::absolute_path>(**input_listing, "cmake");
+		Si::absolute_path const * const cmake_exe = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "cmake");
 		if (!cmake_exe)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const source = find_entry_of_type<Si::absolute_path>(**input_listing, "source");
+		Si::absolute_path const * const source = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "source");
 		if (!source)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const build = find_entry_of_type<Si::absolute_path>(**input_listing, "build");
+		Si::absolute_path const * const build = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "build");
 		if (!build)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
 
 		buildserver::cmake_exe cmake(*cmake_exe);
@@ -439,34 +384,34 @@ namespace example_graph
 		boost::system::error_code error = cmake.generate(*source, *build, definitions, output_sink);
 		assert(!error); //TODO
 
-		listing results;
-		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
+		graph::listing results;
+		results.entries.insert(std::make_pair("output", graph::blob{std::move(output)}));
 		results.entries.insert(std::make_pair("build", *build));
-		return value{Si::to_shared(std::move(results))};
+		return graph::value{Si::to_shared(std::move(results))};
 	}
 
-	Si::fast_variant<input_type_mismatch, value>
-	cmake_build(value input)
+	Si::fast_variant<graph::input_type_mismatch, graph::value>
+	cmake_build(graph::value input)
 	{
-		std::shared_ptr<listing> * const input_listing = Si::try_get_ptr<std::shared_ptr<listing>>(input);
+		auto * const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
 		if (!input_listing)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const cmake_exe = find_entry_of_type<Si::absolute_path>(**input_listing, "cmake");
+		Si::absolute_path const * const cmake_exe = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "cmake");
 		if (!cmake_exe)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const build = find_entry_of_type<Si::absolute_path>(**input_listing, "build");
+		Si::absolute_path const * const build = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "build");
 		if (!build)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
-		std::uint32_t const * const parallelism = find_entry_of_type<std::uint32_t>(**input_listing, "parallelism");
+		std::uint32_t const * const parallelism = graph::find_entry_of_type<std::uint32_t>(**input_listing, "parallelism");
 		if (!parallelism)
 		{
-			return input_type_mismatch{};
+			return graph::input_type_mismatch{};
 		}
 
 		buildserver::cmake_exe cmake(*cmake_exe);
@@ -475,10 +420,10 @@ namespace example_graph
 		boost::system::error_code error = cmake.build(*build, *parallelism, output_sink);
 		assert(!error); //TODO
 
-		listing results;
-		results.entries.insert(std::make_pair("output", blob{std::move(output)}));
+		graph::listing results;
+		results.entries.insert(std::make_pair("output", graph::blob{std::move(output)}));
 		results.entries.insert(std::make_pair("build", *build));
-		return value{Si::to_shared(std::move(results))};
+		return graph::value{Si::to_shared(std::move(results))};
 	}
 }
 
@@ -554,25 +499,25 @@ int main(int argc, char **argv)
 							Si::absolute_path const source_dir = workspace / *Si::path_segment::create("source.git");
 							Si::absolute_path const build_dir = workspace / *Si::path_segment::create("build");
 
-							listing clone_input;
-							clone_input.entries.insert(std::make_pair("repository", uri{parsed_options->repository}));
+							graph::listing clone_input;
+							clone_input.entries.insert(std::make_pair("repository", graph::uri{parsed_options->repository}));
 							clone_input.entries.insert(std::make_pair("git", *maybe_git));
 							clone_input.entries.insert(std::make_pair("destination", source_dir));
-							value clone_output = expect_value(example_graph::clone(Si::to_shared(std::move(clone_input))));
+							graph::value clone_output = expect_value(example_graph::clone(Si::to_shared(std::move(clone_input))));
 
 							boost::filesystem::create_directories(build_dir.to_boost_path());
 
-							listing generate_input;
+							graph::listing generate_input;
 							generate_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
 							generate_input.entries.insert(std::make_pair("source", source_dir));
 							generate_input.entries.insert(std::make_pair("build", build_dir));
-							value generate_output = expect_value(example_graph::cmake_generate(Si::to_shared(std::move(generate_input))));
+							graph::value generate_output = expect_value(example_graph::cmake_generate(Si::to_shared(std::move(generate_input))));
 
-							listing build_input;
+							graph::listing build_input;
 							build_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
 							build_input.entries.insert(std::make_pair("parallelism", static_cast<std::uint32_t>(4)));
 							build_input.entries.insert(std::make_pair("build", build_dir));
-							value build_output = expect_value(example_graph::cmake_build(Si::to_shared(std::move(build_input))));
+							graph::value build_output = expect_value(example_graph::cmake_build(Si::to_shared(std::move(build_input))));
 
 							return build_result::success;
 						}))
