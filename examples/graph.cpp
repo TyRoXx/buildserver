@@ -534,67 +534,70 @@ int main(int argc, char **argv)
 		step_history &history = step.second;
 		Si::spawn_coroutine([&history, &notifier, &io, &parsed_options, &maybe_git, &maybe_cmake](Si::spawn_context yield)
 		{
-			Si::optional<notification> notification_ = yield.get_one(Si::ref(notifier));
-			assert(notification_);
-			std::cerr << "Received a notification\n";
-			try
+			for (;;)
 			{
-				history.is_building = true;
-				Si::optional<std::future<build_result>> maybe_result = yield.get_one(
-					Si::asio::make_posting_observable(
-					io,
-					Si::make_thread_observable<Si::std_threading>([&]() -> build_result
-					{
-						Si::absolute_path const &workspace = parsed_options->workspace;
-						boost::filesystem::remove_all(workspace.to_boost_path());
-						boost::filesystem::create_directories(workspace.to_boost_path());
-
-						Si::absolute_path const source_dir = workspace / *Si::path_segment::create("source.git");
-						Si::absolute_path const build_dir = workspace / *Si::path_segment::create("build");
-
-						listing clone_input;
-						clone_input.entries.insert(std::make_pair("repository", uri{parsed_options->repository}));
-						clone_input.entries.insert(std::make_pair("git", *maybe_git));
-						clone_input.entries.insert(std::make_pair("destination", source_dir));
-						value clone_output = expect_value(example_graph::clone(Si::to_shared(std::move(clone_input))));
-
-						boost::filesystem::create_directories(build_dir.to_boost_path());
-
-						listing generate_input;
-						generate_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
-						generate_input.entries.insert(std::make_pair("source", source_dir));
-						generate_input.entries.insert(std::make_pair("build", build_dir));
-						value generate_output = expect_value(example_graph::cmake_generate(Si::to_shared(std::move(generate_input))));
-
-						listing build_input;
-						build_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
-						build_input.entries.insert(std::make_pair("parallelism", static_cast<std::uint32_t>(4)));
-						build_input.entries.insert(std::make_pair("build", build_dir));
-						value build_output = expect_value(example_graph::cmake_build(Si::to_shared(std::move(build_input))));
-
-						return build_result::success;
-					}))
-				);
-				assert(maybe_result);
-				auto const result = maybe_result->get();
-				switch (result)
+				Si::optional<notification> notification_ = yield.get_one(Si::ref(notifier));
+				assert(notification_);
+				std::cerr << "Received a notification\n";
+				try
 				{
-				case build_result::success:
-					std::cerr << "Build success\n";
-					break;
+					history.is_building = true;
+					Si::optional<std::future<build_result>> maybe_result = yield.get_one(
+						Si::asio::make_posting_observable(
+						io,
+						Si::make_thread_observable<Si::std_threading>([&]() -> build_result
+						{
+							Si::absolute_path const &workspace = parsed_options->workspace;
+							boost::filesystem::remove_all(workspace.to_boost_path());
+							boost::filesystem::create_directories(workspace.to_boost_path());
 
-				case build_result::failure:
-					std::cerr << "Build failure\n";
-					break;
+							Si::absolute_path const source_dir = workspace / *Si::path_segment::create("source.git");
+							Si::absolute_path const build_dir = workspace / *Si::path_segment::create("build");
+
+							listing clone_input;
+							clone_input.entries.insert(std::make_pair("repository", uri{parsed_options->repository}));
+							clone_input.entries.insert(std::make_pair("git", *maybe_git));
+							clone_input.entries.insert(std::make_pair("destination", source_dir));
+							value clone_output = expect_value(example_graph::clone(Si::to_shared(std::move(clone_input))));
+
+							boost::filesystem::create_directories(build_dir.to_boost_path());
+
+							listing generate_input;
+							generate_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
+							generate_input.entries.insert(std::make_pair("source", source_dir));
+							generate_input.entries.insert(std::make_pair("build", build_dir));
+							value generate_output = expect_value(example_graph::cmake_generate(Si::to_shared(std::move(generate_input))));
+
+							listing build_input;
+							build_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
+							build_input.entries.insert(std::make_pair("parallelism", static_cast<std::uint32_t>(4)));
+							build_input.entries.insert(std::make_pair("build", build_dir));
+							value build_output = expect_value(example_graph::cmake_build(Si::to_shared(std::move(build_input))));
+
+							return build_result::success;
+						}))
+					);
+					assert(maybe_result);
+					auto const result = maybe_result->get();
+					switch (result)
+					{
+					case build_result::success:
+						std::cerr << "Build success\n";
+						break;
+
+					case build_result::failure:
+						std::cerr << "Build failure\n";
+						break;
+					}
+					history.last_result = result;
 				}
-				history.last_result = result;
+				catch (std::exception const &ex)
+				{
+					std::cerr << "Exception: " << ex.what() << '\n';
+					history.last_result = build_result::failure;
+				}
+				history.is_building = false;
 			}
-			catch (std::exception const &ex)
-			{
-				std::cerr << "Exception: " << ex.what() << '\n';
-				history.last_result = build_result::failure;
-			}
-			history.is_building = false;
 		});
 	}
 
