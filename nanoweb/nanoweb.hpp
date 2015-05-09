@@ -89,7 +89,7 @@ namespace nanoweb
 
 		Si::http::request const &request = *maybe_request.get();
 
-		boost::optional<Si::http::uri> relative_uri = Si::http::parse_uri(Si::make_memory_range(request.path));
+		Si::optional<Si::http::uri> relative_uri = Si::http::parse_uri(Si::make_memory_range(request.path));
 		if (!relative_uri)
 		{
 			return {}; //TODO
