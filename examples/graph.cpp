@@ -210,12 +210,10 @@ namespace
 		});
 		return handle_request;
 	}
-
-	typedef Si::os_string git_repository_address;
-
+	
 	struct options
 	{
-		git_repository_address repository;
+		Si::noexcept_string repository;
 		boost::uint16_t port;
 		Si::noexcept_string secret;
 		Si::absolute_path workspace;
@@ -229,13 +227,7 @@ namespace
 		boost::program_options::options_description desc("Allowed options");
 		desc.add_options()
 			("help", "produce help message")
-			("repository,r", boost::program_options::
-#ifdef _WIN32
-				wvalue
-#else
-				value
-#endif
-				(&result.repository), "the URI for git cloning the code")
+			("repository,r", boost::program_options::value(&result.repository), "the URI for git cloning the code")
 			("port,p", boost::program_options::value(&result.port), "port to listen on for POSTed push notifications")
 			("secret,s", boost::program_options::value(&result.secret), "a string that needs to be in the query for the notification to be accepted")
 			("workspace,w", boost::program_options::value(&result.workspace), "")
@@ -302,13 +294,13 @@ namespace
 		return exit_code;
 	}
 
-	void git_clone(git_repository_address const &repository, Si::absolute_path const &working_directory, Si::absolute_path const &destination, Si::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
+	void git_clone(Si::os_string repository, Si::absolute_path const &working_directory, Si::absolute_path const &destination, Si::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
 	{
 		Si::async_process_parameters parameters;
 		parameters.executable = git_exe;
 		parameters.current_path = working_directory;
 		parameters.arguments.emplace_back(Si::to_os_string("clone"));
-		parameters.arguments.emplace_back(repository);
+		parameters.arguments.emplace_back(std::move(repository));
 		parameters.arguments.emplace_back(destination.c_str());
 		int exit_code = run_process(parameters, output);
 		if (exit_code != 0)

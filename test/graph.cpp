@@ -56,7 +56,7 @@ BOOST_AUTO_TEST_CASE(graph_typed_transformation)
 	graph::typed_transformation const tf_id_absolute_path{graph::atomic_type::absolute_path, graph::atomic_type::absolute_path, &identity};
 	graph::typed_transformation const tf_id_blob{graph::atomic_type::blob, graph::atomic_type::blob, &identity};
 	graph::typed_transformation const tf_uint32_to_le{graph::atomic_type::uint32, graph::atomic_type::blob, &uint32_to_le};
-	graph::typed_transformation const tf_uint32_add{Si::to_unique(make_pair_type(graph::atomic_type::uint32, graph::atomic_type::uint32)), graph::atomic_type::uint32, &uint32_add};
+	graph::typed_transformation const tf_uint32_add{Si::to_shared(make_pair_type(graph::atomic_type::uint32, graph::atomic_type::uint32)), graph::atomic_type::uint32, &uint32_add};
 	graph::value const result = tf_id_blob.transform(
 		tf_uint32_to_le.transform(
 			tf_uint32_add.transform(

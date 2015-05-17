@@ -6,6 +6,8 @@
 #include <silicium/path_segment.hpp>
 #include <silicium/function.hpp>
 #include <vector>
+#include <map>
+#include <cstdint>
 
 namespace graph
 {
@@ -50,7 +52,7 @@ namespace graph
 
 	typedef Si::fast_variant<
 		atomic_type,
-		std::unique_ptr<listing_type>
+		std::shared_ptr<listing_type>
 	> type;
 
 	struct listing_type

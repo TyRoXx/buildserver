@@ -76,7 +76,7 @@ namespace nanoweb
 	template <class Socket, class YieldContext>
 	boost::system::error_code serve_client(Socket &client, YieldContext &&yield, request_handler const &root_request_handler)
 	{
-		Si::error_or<boost::optional<Si::http::request>> maybe_request = Si::http::receive_request(client, yield);
+		Si::error_or<Si::optional<Si::http::request>> maybe_request = Si::http::receive_request(client, yield);
 		if (maybe_request.is_error())
 		{
 			return maybe_request.error();

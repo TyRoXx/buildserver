@@ -4,6 +4,7 @@
 #include <boost/unordered_map.hpp>
 #include <silicium/absolute_path.hpp>
 #include <silicium/sink/sink.hpp>
+#include <silicium/success.hpp>
 
 namespace buildserver
 {
