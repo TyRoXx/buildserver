@@ -279,7 +279,7 @@ namespace
 	int run_process(Si::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
 	{
 		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
-		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::open_reading("/dev/null").get());
+		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).get());
 		Si::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::launch_process(
 			parameters,
 			standard_input.handle,
