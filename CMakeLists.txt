@@ -48,12 +48,13 @@ set(SILICIUM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/silicium" CAC
 find_package(Silicium REQUIRED)
 include_directories(${SILICIUM_INCLUDE_DIR})
 
-set(LUACPP_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/lua-cpp" CACHE PATH "")
-find_package(LuaCpp REQUIRED)
-include_directories(${LUACPP_INCLUDE_DIRS})
-
-find_package(Lua51 REQUIRED)
-include_directories(${LUA_INCLUDE_DIR})
+find_package(Lua51)
+if(Lua51_FOUND)
+	include_directories(${LUA_INCLUDE_DIR})
+	set(LUACPP_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/lua-cpp" CACHE PATH "")
+	find_package(LuaCpp REQUIRED)
+	include_directories(${LUACPP_INCLUDE_DIRS})
+endif()
 
 find_package(UriParser REQUIRED)
 if(URIPARSER_FOUND)
