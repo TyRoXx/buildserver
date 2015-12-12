@@ -4,3 +4,6 @@
 [submodule "dependencies/lua-cpp"]
 	path = dependencies/lua-cpp
 	url = https://github.com/TyRoXx/lua-cpp.git
+[submodule "dependencies/ventura"]
+	path = dependencies/ventura
+	url = https://github.com/TyRoXx/ventura.git

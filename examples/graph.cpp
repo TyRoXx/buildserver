@@ -14,14 +14,15 @@
 #include <silicium/observable/thread.hpp>
 #include <silicium/sink/ostream_sink.hpp>
 #include <silicium/source/range_source.hpp>
-#include <silicium/open.hpp>
-#include <silicium/fast_variant.hpp>
+#include <ventura/open.hpp>
+#include <silicium/variant.hpp>
 #include <silicium/std_threading.hpp>
-#include <silicium/run_process.hpp>
-#include <silicium/html.hpp>
-#include <silicium/async_process.hpp>
-#include <silicium/absolute_path.hpp>
-#include <silicium/path_segment.hpp>
+#include <ventura/file_operations.hpp>
+#include <ventura/run_process.hpp>
+#include <silicium/html/generator.hpp>
+#include <ventura/async_process.hpp>
+#include <ventura/absolute_path.hpp>
+#include <ventura/path_segment.hpp>
 #include <boost/program_options.hpp>
 #include <boost/optional.hpp>
 #include <boost/range/algorithm/equal.hpp>
@@ -82,7 +83,7 @@ namespace
 
 	private:
 
-		Si::fast_variant<Observer, notification> m_observer_or_notification;
+		Si::variant<Observer, notification> m_observer_or_notification;
 	};
 
 	template <class YieldContext, class NotifierObserver>
@@ -216,7 +217,7 @@ namespace
 		Si::noexcept_string repository;
 		boost::uint16_t port;
 		Si::noexcept_string secret;
-		Si::absolute_path workspace;
+		ventura::absolute_path workspace;
 	};
 
 	boost::optional<options> parse_options(int argc, char **argv)
@@ -276,27 +277,33 @@ namespace
 		return std::move(result);
 	}
 	
-	int run_process(Si::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
+	int run_process(ventura::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
 	{
 		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
-		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).get());
-		Si::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::launch_process(
+		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(ventura::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).get());
+		ventura::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(ventura::launch_process(
 			parameters,
 			standard_input.handle,
 			standard_output_and_error.write.handle,
-			standard_output_and_error.write.handle
+			standard_output_and_error.write.handle,
+			std::vector<std::pair<Si::os_char const *, Si::os_char const *>>(),
+			ventura::environment_inheritance::inherit
 		).get());
 		boost::asio::io_service io;
-		Si::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output), std::move(standard_output_and_error.read));
+
+		boost::promise<void> stop_polling;
+		boost::shared_future<void> stopped_polling = stop_polling.get_future().share();
+
+		ventura::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output), std::move(standard_output_and_error.read), stopped_polling);
 		standard_output_and_error.write.close();
 		io.run();
 		int exit_code = process.wait_for_exit().get();
 		return exit_code;
 	}
 
-	void git_clone(Si::os_string repository, Si::absolute_path const &working_directory, Si::absolute_path const &destination, Si::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
+	void git_clone(Si::os_string repository, ventura::absolute_path const &working_directory, ventura::absolute_path const &destination, ventura::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
 	{
-		Si::async_process_parameters parameters;
+		ventura::async_process_parameters parameters;
 		parameters.executable = git_exe;
 		parameters.current_path = working_directory;
 		parameters.arguments.emplace_back(Si::to_os_string("clone"));
@@ -312,7 +319,7 @@ namespace
 
 namespace example_graph
 {
-	Si::fast_variant<graph::input_type_mismatch, graph::value>
+	Si::variant<graph::input_type_mismatch, graph::value>
 	clone(graph::value input)
 	{
 		auto * const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
@@ -325,19 +332,19 @@ namespace example_graph
 		{
 			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const destination = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "destination");
+		ventura::absolute_path const * const destination = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "destination");
 		if (!destination)
 		{
 			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const git_exe = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "git");
+		ventura::absolute_path const * const git_exe = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "git");
 		if (!git_exe)
 		{
 			return graph::input_type_mismatch{};
 		}
 		std::vector<char> output;
 		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
-		git_clone(Si::to_os_string(repository->value), Si::get_current_working_directory(), *destination, *git_exe, output_sink);
+		git_clone(Si::to_os_string(repository->value), ventura::get_current_working_directory(Si::throw_), *destination, *git_exe, output_sink);
 
 		graph::listing results;
 		results.entries.insert(std::make_pair("output", graph::blob{std::move(output)}));
@@ -345,7 +352,7 @@ namespace example_graph
 		return graph::value{Si::to_shared(std::move(results))};
 	}
 
-	Si::fast_variant<graph::input_type_mismatch, graph::value>
+	Si::variant<graph::input_type_mismatch, graph::value>
 	cmake_generate(graph::value input)
 	{
 		auto * const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
@@ -353,17 +360,17 @@ namespace example_graph
 		{
 			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const cmake_exe = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "cmake");
+		ventura::absolute_path const * const cmake_exe = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "cmake");
 		if (!cmake_exe)
 		{
 			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const source = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "source");
+		ventura::absolute_path const * const source = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "source");
 		if (!source)
 		{
 			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const build = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "build");
+		ventura::absolute_path const * const build = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "build");
 		if (!build)
 		{
 			return graph::input_type_mismatch{};
@@ -382,7 +389,7 @@ namespace example_graph
 		return graph::value{Si::to_shared(std::move(results))};
 	}
 
-	Si::fast_variant<graph::input_type_mismatch, graph::value>
+	Si::variant<graph::input_type_mismatch, graph::value>
 	cmake_build(graph::value input)
 	{
 		auto * const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
@@ -390,12 +397,12 @@ namespace example_graph
 		{
 			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const cmake_exe = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "cmake");
+		ventura::absolute_path const * const cmake_exe = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "cmake");
 		if (!cmake_exe)
 		{
 			return graph::input_type_mismatch{};
 		}
-		Si::absolute_path const * const build = graph::find_entry_of_type<Si::absolute_path>(**input_listing, "build");
+		ventura::absolute_path const * const build = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "build");
 		if (!build)
 		{
 			return graph::input_type_mismatch{};
@@ -427,14 +434,14 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	Si::optional<Si::absolute_path> maybe_git = buildserver::find_git().get();
+	Si::optional<ventura::absolute_path> maybe_git = buildserver::find_git().get();
 	if (!maybe_git)
 	{
 		std::cerr << "Could not find Git\n";
 		return 1;
 	}
 
-	Si::optional<Si::absolute_path> maybe_cmake = buildserver::find_cmake().get();
+	Si::optional<ventura::absolute_path> maybe_cmake = buildserver::find_cmake().get();
 	if (!maybe_cmake)
 	{
 		std::cerr << "Could not find CMake\n";
@@ -484,12 +491,12 @@ int main(int argc, char **argv)
 						io,
 						Si::make_thread_observable<Si::std_threading>([&]() -> build_result
 						{
-							Si::absolute_path const &workspace = parsed_options->workspace;
+							ventura::absolute_path const &workspace = parsed_options->workspace;
 							boost::filesystem::remove_all(workspace.to_boost_path());
 							boost::filesystem::create_directories(workspace.to_boost_path());
 
-							Si::absolute_path const source_dir = workspace / *Si::path_segment::create("source.git");
-							Si::absolute_path const build_dir = workspace / *Si::path_segment::create("build");
+							ventura::absolute_path const source_dir = workspace / *ventura::path_segment::create("source.git");
+							ventura::absolute_path const build_dir = workspace / *ventura::path_segment::create("build");
 
 							graph::listing clone_input;
 							clone_input.entries.insert(std::make_pair("repository", graph::uri{parsed_options->repository}));

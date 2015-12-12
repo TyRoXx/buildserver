@@ -1,9 +1,9 @@
 #ifndef BUILDSERVER_GRAPH_HPP
 #define BUILDSERVER_GRAPH_HPP
 
-#include <silicium/fast_variant.hpp>
-#include <silicium/absolute_path.hpp>
-#include <silicium/path_segment.hpp>
+#include <silicium/variant.hpp>
+#include <ventura/absolute_path.hpp>
+#include <ventura/path_segment.hpp>
 #include <silicium/function.hpp>
 #include <vector>
 #include <map>
@@ -25,16 +25,16 @@ namespace graph
 
 	struct filesystem_directory_ownership
 	{
-		Si::absolute_path owned;
+		ventura::absolute_path owned;
 	};
 
-	typedef Si::fast_variant<
+	typedef Si::variant<
 		blob,
 		std::shared_ptr<listing>,
 		uri,
 		filesystem_directory_ownership,
-		Si::absolute_path,
-		Si::path_segment,
+		ventura::absolute_path,
+		ventura::path_segment,
 		std::uint32_t
 	> value;
 
@@ -50,7 +50,7 @@ namespace graph
 
 	struct listing_type;
 
-	typedef Si::fast_variant<
+	typedef Si::variant<
 		atomic_type,
 		std::shared_ptr<listing_type>
 	> type;
@@ -80,7 +80,7 @@ namespace graph
 	{
 	};
 
-	value expect_value(Si::fast_variant<input_type_mismatch, value> maybe)
+	value expect_value(Si::variant<input_type_mismatch, value> maybe)
 	{
 		return Si::visit<value>(
 			maybe,

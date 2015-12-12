@@ -48,6 +48,9 @@ set(SILICIUM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/silicium" CAC
 find_package(Silicium REQUIRED)
 include_directories(${SILICIUM_INCLUDE_DIR})
 
+set(VENTURA_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/ventura" CACHE PATH "")
+include_directories(${VENTURA_INCLUDE_DIR})
+
 find_package(Lua51)
 if(Lua51_FOUND)
 	include_directories(${LUA_INCLUDE_DIR})

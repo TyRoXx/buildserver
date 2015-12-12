@@ -19,7 +19,7 @@ namespace buildserver
 	}
 #endif
 
-	Si::error_or<Si::optional<Si::absolute_path>> find_cmake()
+	Si::error_or<Si::optional<ventura::absolute_path>> find_cmake()
 	{
 #ifdef _WIN32
 		wchar_t *programs = nullptr;
@@ -28,18 +28,18 @@ namespace buildserver
 			throw std::logic_error("COM error handling to do");
 		}
 		std::unique_ptr<wchar_t, com_deleter> free_programs(programs);
-		Si::optional<Si::absolute_path> const programs_path = Si::absolute_path::create(programs);
+		Si::optional<ventura::absolute_path> const programs_path = ventura::absolute_path::create(programs);
 		if (!programs_path)
 		{
 			return Si::none;
 		}
 		return find_file_in_directories(
-			*Si::path_segment::create("cmake.exe"), {
+			*ventura::path_segment::create("cmake.exe"), {
 			*programs_path / Si::relative_path("CMake/bin"),
 			*programs_path / Si::relative_path("CMake 2.8/bin")
 		});
 #else
-		return find_executable_unix(*Si::path_segment::create("cmake"), {});
+		return find_executable_unix(*ventura::path_segment::create("cmake"), {});
 #endif
 	}
 }

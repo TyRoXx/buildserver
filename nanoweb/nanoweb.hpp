@@ -8,6 +8,7 @@
 #include <silicium/observable/spawn_coroutine.hpp>
 #include <silicium/range_value.hpp>
 #include <silicium/sink/iterator_sink.hpp>
+#include <silicium/sink/append.hpp>
 #include <unordered_map>
 #include <functional>
 #include <boost/asio/ip/tcp.hpp>

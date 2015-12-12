@@ -13,14 +13,14 @@
 #include <silicium/observable/thread.hpp>
 #include <silicium/sink/ostream_sink.hpp>
 #include <silicium/source/range_source.hpp>
-#include <silicium/open.hpp>
-#include <silicium/fast_variant.hpp>
+#include <ventura/open.hpp>
+#include <silicium/variant.hpp>
 #include <silicium/std_threading.hpp>
-#include <silicium/run_process.hpp>
-#include <silicium/html.hpp>
-#include <silicium/async_process.hpp>
-#include <silicium/absolute_path.hpp>
-#include <silicium/path_segment.hpp>
+#include <ventura/run_process.hpp>
+#include <silicium/html/generator.hpp>
+#include <ventura/async_process.hpp>
+#include <ventura/absolute_path.hpp>
+#include <ventura/path_segment.hpp>
 #include <boost/program_options.hpp>
 #include <boost/optional.hpp>
 #include <boost/range/algorithm/equal.hpp>
@@ -81,7 +81,7 @@ namespace
 
 	private:
 
-		Si::fast_variant<Observer, notification> m_observer_or_notification;
+		Si::variant<Observer, notification> m_observer_or_notification;
 	};
 
 	template <class YieldContext, class NotifierObserver>
@@ -217,7 +217,7 @@ namespace
 		git_repository_address repository;
 		boost::uint16_t port;
 		Si::noexcept_string secret;
-		Si::absolute_path workspace;
+		ventura::absolute_path workspace;
 	};
 
 	boost::optional<options> parse_options(int argc, char **argv)
@@ -283,27 +283,33 @@ namespace
 		return std::move(result);
 	}
 	
-	int run_process(Si::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
+	int run_process(ventura::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
 	{
 		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
-		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).get());
-		Si::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::launch_process(
+		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(ventura::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).get());
+		ventura::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(ventura::launch_process(
 			parameters,
 			standard_input.handle,
 			standard_output_and_error.write.handle,
-			standard_output_and_error.write.handle
+			standard_output_and_error.write.handle,
+			std::vector<std::pair<Si::os_char const *, Si::os_char const *>>(),
+			ventura::environment_inheritance::inherit
 		).get());
 		boost::asio::io_service io;
-		Si::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output), std::move(standard_output_and_error.read));
+
+		boost::promise<void> stop_polling;
+		boost::shared_future<void> stopped_polling = stop_polling.get_future().share();
+
+		ventura::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output), std::move(standard_output_and_error.read), stopped_polling);
 		standard_output_and_error.write.close();
 		io.run();
 		int exit_code = process.wait_for_exit().get();
 		return exit_code;
 	}
 
-	void git_clone(git_repository_address const &repository, Si::absolute_path const &destination, Si::path_segment const &clone_name, Si::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
+	void git_clone(git_repository_address const &repository, ventura::absolute_path const &destination, ventura::path_segment const &clone_name, ventura::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
 	{
-		Si::async_process_parameters parameters;
+		ventura::async_process_parameters parameters;
 		parameters.executable = git_exe;
 		parameters.current_path = destination;
 		parameters.arguments.emplace_back(Si::to_os_string("clone"));
@@ -316,11 +322,11 @@ namespace
 		}
 	}
 
-	build_result run_test(Si::absolute_path const &build_dir, Si::sink<char, Si::success> &output)
+	build_result run_test(ventura::absolute_path const &build_dir, Si::sink<char, Si::success> &output)
 	{
-		Si::absolute_path const test_dir = build_dir / "test";
-		Si::absolute_path const test_exe = test_dir / "unit_test";
-		Si::async_process_parameters parameters;
+		ventura::absolute_path const test_dir = build_dir / "test";
+		ventura::absolute_path const test_exe = test_dir / "unit_test";
+		ventura::async_process_parameters parameters;
 		parameters.executable = test_exe;
 		parameters.current_path = test_dir;
 		int exit_code = run_process(parameters, output);
@@ -336,16 +342,16 @@ namespace
 
 	build_result build(
 		git_repository_address const &repository,
-		Si::absolute_path const &workspace,
-		Si::absolute_path const &git,
-		Si::absolute_path const &cmake,
+		ventura::absolute_path const &workspace,
+		ventura::absolute_path const &git,
+		ventura::absolute_path const &cmake,
 		Si::sink<char, Si::success> &output)
 	{
-		Si::path_segment const clone_name = *Si::path_segment::create("source.git");
+		ventura::path_segment const clone_name = *ventura::path_segment::create("source.git");
 		git_clone(repository, workspace, clone_name, git, output);
-		Si::absolute_path const source = workspace / clone_name;
+		ventura::absolute_path const source = workspace / clone_name;
 
-		Si::absolute_path const build = workspace / "build";
+		ventura::absolute_path const build = workspace / "build";
 		boost::filesystem::create_directories(build.to_boost_path());
 
 		buildserver::cmake_exe cmake_builder(cmake);
@@ -373,14 +379,14 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	Si::optional<Si::absolute_path> maybe_git = buildserver::find_git().get();
+	Si::optional<ventura::absolute_path> maybe_git = buildserver::find_git().get();
 	if (!maybe_git)
 	{
 		std::cerr << "Could not find Git\n";
 		return 1;
 	}
 
-	Si::optional<Si::absolute_path> maybe_cmake = buildserver::find_cmake().get();
+	Si::optional<ventura::absolute_path> maybe_cmake = buildserver::find_cmake().get();
 	if (!maybe_cmake)
 	{
 		std::cerr << "Could not find CMake\n";

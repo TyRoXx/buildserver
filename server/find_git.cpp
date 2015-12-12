@@ -3,15 +3,15 @@
 
 namespace buildserver
 {
-	Si::error_or<Si::optional<Si::absolute_path>> find_git()
+	Si::error_or<Si::optional<ventura::absolute_path>> find_git()
 	{
 #ifdef _WIN32
 		return buildserver::find_file_in_directories(
-			*Si::path_segment::create("git.exe"),
-			{*Si::absolute_path::create("C:\\Program Files (x86)\\Git\\bin")}
+			*ventura::path_segment::create("git.exe"),
+			{*ventura::absolute_path::create("C:\\Program Files (x86)\\Git\\bin")}
 		);
 #else
-		return buildserver::find_executable_unix(*Si::path_segment::create("git"), {});
+		return buildserver::find_executable_unix(*ventura::path_segment::create("git"), {});
 #endif
 	}
 }
