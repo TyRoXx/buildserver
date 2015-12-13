@@ -4,9 +4,9 @@
 
 namespace buildserver
 {
-	Si::error_or<Si::optional<ventura::absolute_path>> find_file_in_directories(
-		ventura::path_segment const &filename,
-		std::vector<ventura::absolute_path> const &directories)
+	Si::error_or<Si::optional<ventura::absolute_path>>
+	find_file_in_directories(ventura::path_segment const &filename,
+	                         std::vector<ventura::absolute_path> const &directories)
 	{
 		for (auto const &directory : directories)
 		{
@@ -25,9 +25,9 @@ namespace buildserver
 	}
 
 #ifndef _WIN32
-	Si::error_or<Si::optional<ventura::absolute_path>> find_executable_unix(
-		ventura::path_segment const &filename,
-		std::vector<ventura::absolute_path> additional_directories)
+	Si::error_or<Si::optional<ventura::absolute_path>>
+	find_executable_unix(ventura::path_segment const &filename,
+	                     std::vector<ventura::absolute_path> additional_directories)
 	{
 		additional_directories.emplace_back(*ventura::absolute_path::create("/bin"));
 		additional_directories.emplace_back(*ventura::absolute_path::create("/usr/bin"));

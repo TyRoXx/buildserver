@@ -11,36 +11,25 @@ namespace buildserver
 	struct cmake
 	{
 		virtual ~cmake();
-		virtual boost::system::error_code generate(
-			ventura::absolute_path const &source,
-			ventura::absolute_path const &build,
-			boost::unordered_map<std::string, std::string> const &definitions,
-			Si::sink<char, Si::success> &output
-		) const = 0;
-		virtual boost::system::error_code build(
-			ventura::absolute_path const &build,
-			unsigned cpu_parallelism,
-			Si::sink<char, Si::success> &output
-		) const = 0;
+		virtual boost::system::error_code generate(ventura::absolute_path const &source,
+		                                           ventura::absolute_path const &build,
+		                                           boost::unordered_map<std::string, std::string> const &definitions,
+		                                           Si::sink<char, Si::success> &output) const = 0;
+		virtual boost::system::error_code build(ventura::absolute_path const &build, unsigned cpu_parallelism,
+		                                        Si::sink<char, Si::success> &output) const = 0;
 	};
 
 	struct cmake_exe : cmake
 	{
 		explicit cmake_exe(ventura::absolute_path exe);
-		virtual boost::system::error_code generate(
-			ventura::absolute_path const &source,
-			ventura::absolute_path const &build,
-			boost::unordered_map<std::string, std::string> const &definitions,
-			Si::sink<char, Si::success> &output
-		) const SILICIUM_OVERRIDE;
-		virtual boost::system::error_code build(
-			ventura::absolute_path const &build,
-			unsigned cpu_parallelism,
-			Si::sink<char, Si::success> &output
-		) const SILICIUM_OVERRIDE;
+		virtual boost::system::error_code generate(ventura::absolute_path const &source,
+		                                           ventura::absolute_path const &build,
+		                                           boost::unordered_map<std::string, std::string> const &definitions,
+		                                           Si::sink<char, Si::success> &output) const SILICIUM_OVERRIDE;
+		virtual boost::system::error_code build(ventura::absolute_path const &build, unsigned cpu_parallelism,
+		                                        Si::sink<char, Si::success> &output) const SILICIUM_OVERRIDE;
 
 	private:
-
 		ventura::absolute_path m_exe;
 	};
 }

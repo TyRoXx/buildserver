@@ -28,15 +28,8 @@ namespace graph
 		ventura::absolute_path owned;
 	};
 
-	typedef Si::variant<
-		blob,
-		std::shared_ptr<listing>,
-		uri,
-		filesystem_directory_ownership,
-		ventura::absolute_path,
-		ventura::path_segment,
-		std::uint32_t
-	> value;
+	typedef Si::variant<blob, std::shared_ptr<listing>, uri, filesystem_directory_ownership, ventura::absolute_path,
+	                    ventura::path_segment, std::uint32_t> value;
 
 	enum class atomic_type
 	{
@@ -50,10 +43,7 @@ namespace graph
 
 	struct listing_type;
 
-	typedef Si::variant<
-		atomic_type,
-		std::shared_ptr<listing_type>
-	> type;
+	typedef Si::variant<atomic_type, std::shared_ptr<listing_type>> type;
 
 	struct listing_type
 	{
@@ -82,14 +72,18 @@ namespace graph
 
 	value expect_value(Si::variant<input_type_mismatch, value> maybe)
 	{
-		return Si::visit<value>(
-			maybe,
-			[](input_type_mismatch) -> value { throw std::invalid_argument("input type mismatch"); },
-			[](value &result) { return std::move(result); }
-		);
+		return Si::visit<value>(maybe,
+		                        [](input_type_mismatch) -> value
+		                        {
+			                        throw std::invalid_argument("input type mismatch");
+			                    },
+		                        [](value &result)
+		                        {
+			                        return std::move(result);
+			                    });
 	}
 
-	typedef Si::function<value (value)> untyped_transformation;
+	typedef Si::function<value(value)> untyped_transformation;
 
 	struct typed_transformation
 	{

@@ -43,64 +43,58 @@ namespace
 		template <class ActualObserver>
 		void async_get_one(ActualObserver &&observer)
 		{
-			return Si::visit<void>(
-				m_observer_or_notification,
-				[this, &observer](Observer &my_observer) mutable
-				{
-					assert(!my_observer.get());
-					my_observer = Observer(observer);
-				},
-				[this, &observer](notification)
-				{
-					m_observer_or_notification = Observer();
-					std::move(observer).got_element(notification());
-				}
-			);
+			return Si::visit<void>(m_observer_or_notification,
+			                       [this, &observer](Observer &my_observer) mutable
+			                       {
+				                       assert(!my_observer.get());
+				                       my_observer = Observer(observer);
+				                   },
+			                       [this, &observer](notification)
+			                       {
+				                       m_observer_or_notification = Observer();
+				                       std::move(observer).got_element(notification());
+				                   });
 		}
 
 		void notify()
 		{
-			Si::visit<void>(
-				m_observer_or_notification,
-				[this](Observer &observer)
-				{
-					if (observer.get())
-					{
-						Si::exchange(observer, Observer()).got_element(notification());
-					}
-					else
-					{
-						m_observer_or_notification = notification();
-					}
-				},
-				[](notification const &)
-				{
-				}
-			);
+			Si::visit<void>(m_observer_or_notification,
+			                [this](Observer &observer)
+			                {
+				                if (observer.get())
+				                {
+					                Si::exchange(observer, Observer()).got_element(notification());
+				                }
+				                else
+				                {
+					                m_observer_or_notification = notification();
+				                }
+				            },
+			                [](notification const &)
+			                {
+				            });
 		}
 
 	private:
-
 		Si::variant<Observer, notification> m_observer_or_notification;
 	};
 
 	template <class YieldContext, class NotifierObserver>
-	nanoweb::request_handler_result notify(
-		boost::asio::ip::tcp::socket &client,
-		YieldContext &&yield,
-		Si::noexcept_string const &path,
-		Si::noexcept_string const &secret,
-		saturating_notifier<NotifierObserver> &notifier)
+	nanoweb::request_handler_result notify(boost::asio::ip::tcp::socket &client, YieldContext &&yield,
+	                                       Si::noexcept_string const &path, Si::noexcept_string const &secret,
+	                                       saturating_notifier<NotifierObserver> &notifier)
 	{
 		if (std::string::npos == path.find(secret))
 		{
-			nanoweb::quick_final_response(client, yield, "403", "Forbidden", Si::make_c_str_range("the path does not contain the correct secret"));
+			nanoweb::quick_final_response(client, yield, "403", "Forbidden",
+			                              Si::make_c_str_range("the path does not contain the correct secret"));
 			return nanoweb::request_handler_result::handled;
 		}
 
 		notifier.notify();
 
-		nanoweb::quick_final_response(client, yield, "200", "OK", Si::make_c_str_range("the server has been successfully notified"));
+		nanoweb::quick_final_response(client, yield, "200", "OK",
+		                              Si::make_c_str_range("the server has been successfully notified"));
 		return nanoweb::request_handler_result::handled;
 	}
 
@@ -115,69 +109,69 @@ namespace
 		bool is_building = false;
 		Si::optional<build_result> last_result;
 	};
-	
+
 	template <class CharSink, class StepRange>
 	void render_overview_page(CharSink &&rendered, StepRange &&steps)
 	{
 		auto doc = Si::html::make_generator(std::forward<CharSink>(rendered));
 		doc("html", [&]()
-		{
-			doc("head", [&]()
-			{
-				doc("title", [&]()
-				{
-					doc.write("buildserver overview");
-				});
+		    {
+			    doc("head", [&]()
+			        {
+				        doc("title", [&]()
+				            {
+					            doc.write("buildserver overview");
+					        });
+				    });
+			    doc("body", [&]()
+			        {
+				        doc("h1", [&]()
+				            {
+					            doc.write("Overview");
+					        });
+				        doc("table",
+				            [&]()
+				            {
+					            doc.attribute("border", "1");
+					        },
+				            [&]()
+				            {
+					            for (auto &&step : steps)
+					            {
+						            doc("tr", [&]()
+						                {
+							                doc("td", [&]()
+							                    {
+								                    doc.write(step.first);
+								                });
+							                step_history const &history = step.second;
+							                doc("td", [&]()
+							                    {
+								                    doc.write(history.is_building ? "building.." : "idle");
+								                });
+							                doc("td", [&]()
+							                    {
+								                    if (!history.last_result)
+								                    {
+									                    doc.write("not built");
+									                    return;
+								                    }
+								                    doc.write("last build ");
+								                    switch (*history.last_result)
+								                    {
+								                    case build_result::success:
+									                    doc.write("succeeded");
+									                    break;
+								                    case build_result::failure:
+									                    doc.write("failed");
+									                    break;
+								                    }
+								                });
+							            });
+					            }
+					        });
+				    });
 			});
-			doc("body", [&]()
-			{
-				doc("h1", [&]()
-				{
-					doc.write("Overview");
-				});
-				doc("table",
-					[&]()
-				{
-					doc.attribute("border", "1");
-				},
-					[&]()
-				{
-					for (auto &&step : steps)
-					{
-						doc("tr", [&]()
-						{
-							doc("td", [&]()
-							{
-								doc.write(step.first);
-							});
-							step_history const &history = step.second;
-							doc("td", [&]()
-							{
-								doc.write(history.is_building ? "building.." : "idle");
-							});
-							doc("td", [&]()
-							{
-								if (!history.last_result)
-								{
-									doc.write("not built");
-									return;
-								}
-								doc.write("last build ");
-								switch (*history.last_result)
-								{
-								case build_result::success:
-									doc.write("succeeded");
-									break;
-								case build_result::failure:
-									doc.write("failed");
-									break;
-								}
-							});
-						});
-					}
-				});
-			});
-		});
 	}
 
 	struct step_history_registry
@@ -186,27 +180,28 @@ namespace
 	};
 
 	template <class NotifierObserver>
-	nanoweb::request_handler make_root_request_handler(Si::noexcept_string const &secret, saturating_notifier<NotifierObserver> &notifier, step_history_registry const &registry)
+	nanoweb::request_handler make_root_request_handler(Si::noexcept_string const &secret,
+	                                                   saturating_notifier<NotifierObserver> &notifier,
+	                                                   step_history_registry const &registry)
 	{
-		auto handle_request = nanoweb::make_directory({
-			{
-				Si::make_c_str_range(""),
-				nanoweb::request_handler([&registry](boost::asio::ip::tcp::socket &client, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
-				{
-					std::vector<char> content;
-					render_overview_page(Si::make_container_sink(content), registry.name_to_step);
-					nanoweb::quick_final_response(client, yield, "200", "OK", Si::make_memory_range(content));
-					return nanoweb::request_handler_result::handled;
-				})
-			},
-			{
-				Si::make_c_str_range("notify"),
-				nanoweb::request_handler([&secret, &notifier](boost::asio::ip::tcp::socket &client, Si::http::request const &request, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
-				{
-					return notify(client, yield, request.path, secret, notifier);
-				})
-			}
-		});
+		auto handle_request = nanoweb::make_directory(
+		    {{Si::make_c_str_range(""),
+		      nanoweb::request_handler(
+		          [&registry](boost::asio::ip::tcp::socket &client, Si::http::request const &,
+		                      Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+		          {
+			          std::vector<char> content;
+			          render_overview_page(Si::make_container_sink(content), registry.name_to_step);
+			          nanoweb::quick_final_response(client, yield, "200", "OK", Si::make_memory_range(content));
+			          return nanoweb::request_handler_result::handled;
+			      })},
+		     {Si::make_c_str_range("notify"),
+		      nanoweb::request_handler(
+		          [&secret, &notifier](boost::asio::ip::tcp::socket &client, Si::http::request const &request,
+		                               Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+		          {
+			          return notify(client, yield, request.path, secret, notifier);
+			      })}});
 		return handle_request;
 	}
 
@@ -224,21 +219,20 @@ namespace
 	{
 		options result;
 		result.port = 8080;
-		
+
 		boost::program_options::options_description desc("Allowed options");
-		desc.add_options()
-			("help", "produce help message")
-			("repository,r", boost::program_options::
+		desc.add_options()("help", "produce help message")("repository,r", boost::program_options::
 #ifdef _WIN32
-				wvalue
+		                                                                       wvalue
 #else
-				value
+		                                                                       value
 #endif
-				(&result.repository), "the URI for git cloning the code")
-			("port,p", boost::program_options::value(&result.port), "port to listen on for POSTed push notifications")
-			("secret,s", boost::program_options::value(&result.secret), "a string that needs to be in the query for the notification to be accepted")
-			("workspace,w", boost::program_options::value(&result.workspace), "")
-		;
+		                                                   (&result.repository),
+		                                                   "the URI for git cloning the code")(
+		    "port,p", boost::program_options::value(&result.port), "port to listen on for POSTed push notifications")(
+		    "secret,s", boost::program_options::value(&result.secret),
+		    "a string that needs to be in the query for the notification to be accepted")(
+		    "workspace,w", boost::program_options::value(&result.workspace), "");
 
 		boost::program_options::positional_options_description positional;
 		positional.add("repository", 1);
@@ -248,13 +242,12 @@ namespace
 		boost::program_options::variables_map vm;
 		try
 		{
-			boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(desc).positional(positional).run(), vm);
+			boost::program_options::store(
+			    boost::program_options::command_line_parser(argc, argv).options(desc).positional(positional).run(), vm);
 		}
 		catch (boost::program_options::error const &ex)
 		{
-			std::cerr
-				<< ex.what() << '\n'
-				<< desc << "\n";
+			std::cerr << ex.what() << '\n' << desc << "\n";
 			return boost::none;
 		}
 
@@ -262,7 +255,7 @@ namespace
 
 		if (vm.count("help"))
 		{
-		    std::cerr << desc << "\n";
+			std::cerr << desc << "\n";
 			return boost::none;
 		}
 
@@ -282,32 +275,34 @@ namespace
 
 		return std::move(result);
 	}
-	
+
 	int run_process(ventura::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
 	{
 		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
-		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(ventura::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).get());
-		ventura::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(ventura::launch_process(
-			parameters,
-			standard_input.handle,
-			standard_output_and_error.write.handle,
-			standard_output_and_error.write.handle,
-			std::vector<std::pair<Si::os_char const *, Si::os_char const *>>(),
-			ventura::environment_inheritance::inherit
-		).get());
+		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(
+		    ventura::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).get());
+		ventura::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(
+		    ventura::launch_process(parameters, standard_input.handle, standard_output_and_error.write.handle,
+		                            standard_output_and_error.write.handle,
+		                            std::vector<std::pair<Si::os_char const *, Si::os_char const *>>(),
+		                            ventura::environment_inheritance::inherit)
+		        .get());
 		boost::asio::io_service io;
 
 		boost::promise<void> stop_polling;
 		boost::shared_future<void> stopped_polling = stop_polling.get_future().share();
 
-		ventura::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output), std::move(standard_output_and_error.read), stopped_polling);
+		ventura::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output),
+		                                                std::move(standard_output_and_error.read), stopped_polling);
 		standard_output_and_error.write.close();
 		io.run();
 		int exit_code = process.wait_for_exit().get();
 		return exit_code;
 	}
 
-	void git_clone(git_repository_address const &repository, ventura::absolute_path const &destination, ventura::path_segment const &clone_name, ventura::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
+	void git_clone(git_repository_address const &repository, ventura::absolute_path const &destination,
+	               ventura::path_segment const &clone_name, ventura::absolute_path const &git_exe,
+	               Si::sink<char, Si::success> &output)
 	{
 		ventura::async_process_parameters parameters;
 		parameters.executable = git_exe;
@@ -340,12 +335,9 @@ namespace
 		}
 	}
 
-	build_result build(
-		git_repository_address const &repository,
-		ventura::absolute_path const &workspace,
-		ventura::absolute_path const &git,
-		ventura::absolute_path const &cmake,
-		Si::sink<char, Si::success> &output)
+	build_result build(git_repository_address const &repository, ventura::absolute_path const &workspace,
+	                   ventura::absolute_path const &git, ventura::absolute_path const &cmake,
+	                   Si::sink<char, Si::success> &output)
 	{
 		ventura::path_segment const clone_name = *ventura::path_segment::create("source.git");
 		git_clone(repository, workspace, clone_name, git, output);
@@ -355,7 +347,8 @@ namespace
 		boost::filesystem::create_directories(build.to_boost_path());
 
 		buildserver::cmake_exe cmake_builder(cmake);
-		boost::system::error_code error = cmake_builder.generate(source, build, boost::unordered_map<std::string, std::string>{}, output);
+		boost::system::error_code error =
+		    cmake_builder.generate(source, build, boost::unordered_map<std::string, std::string>{}, output);
 		if (error)
 		{
 			boost::throw_exception(boost::system::system_error(error));
@@ -398,69 +391,72 @@ int main(int argc, char **argv)
 	saturating_notifier<Si::erased_observer<notification>> notifier;
 	step_history_registry registry;
 
-	nanoweb::request_handler root_request_handler = make_root_request_handler(parsed_options->secret, notifier, registry);
+	nanoweb::request_handler root_request_handler =
+	    make_root_request_handler(parsed_options->secret, notifier, registry);
 	Si::spawn_observable(Si::transform(
-		Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port))),
-		[&root_request_handler](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
-		{
-			auto client = maybe_client.get();
-			Si::spawn_coroutine([client, &root_request_handler](Si::spawn_context yield)
-			{
-				auto error = nanoweb::serve_client(*client, yield, root_request_handler);
-				if (!!error)
-				{
-					std::cerr << client->remote_endpoint().address() << ": " << error << '\n';
-				}
-			});
-			return{};
-		}
-	));
+	    Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(
+	        io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port))),
+	    [&root_request_handler](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
+	    {
+		    auto client = maybe_client.get();
+		    Si::spawn_coroutine([client, &root_request_handler](Si::spawn_context yield)
+		                        {
+			                        auto error = nanoweb::serve_client(*client, yield, root_request_handler);
+			                        if (!!error)
+			                        {
+				                        std::cerr << client->remote_endpoint().address() << ": " << error << '\n';
+			                        }
+			                    });
+		    return {};
+		}));
 
 	registry.name_to_step["silicium"] = step_history();
 
 	for (auto &step : registry.name_to_step)
 	{
 		step_history &history = step.second;
-		Si::spawn_coroutine([&history, &notifier, &io, &parsed_options, &maybe_git, &maybe_cmake](Si::spawn_context yield)
-		{
-			Si::optional<notification> notification_ = yield.get_one(Si::ref(notifier));
-			assert(notification_);
-			std::cerr << "Received a notification\n";
-			try
-			{
-				history.is_building = true;
-				Si::optional<std::future<build_result>> maybe_result = yield.get_one(
-					Si::asio::make_posting_observable(
-					io,
-					Si::make_thread_observable<Si::std_threading>([&]()
-					{
-						boost::filesystem::remove_all(parsed_options->workspace.to_boost_path());
-						boost::filesystem::create_directories(parsed_options->workspace.to_boost_path());
-						auto output = Si::virtualize_sink(Si::ostream_ref_sink(std::cerr));
-						return build(parsed_options->repository, parsed_options->workspace, *maybe_git, *maybe_cmake, output);
-					}))
-				);
-				assert(maybe_result);
-				auto const result = maybe_result->get();
-				switch (result)
-				{
-				case build_result::success:
-					std::cerr << "Build success\n";
-					break;
+		Si::spawn_coroutine(
+		    [&history, &notifier, &io, &parsed_options, &maybe_git, &maybe_cmake](Si::spawn_context yield)
+		    {
+			    Si::optional<notification> notification_ = yield.get_one(Si::ref(notifier));
+			    assert(notification_);
+			    std::cerr << "Received a notification\n";
+			    try
+			    {
+				    history.is_building = true;
+				    Si::optional<std::future<build_result>> maybe_result =
+				        yield.get_one(Si::asio::make_posting_observable(
+				            io, Si::make_thread_observable<Si::std_threading>(
+				                    [&]()
+				                    {
+					                    boost::filesystem::remove_all(parsed_options->workspace.to_boost_path());
+					                    boost::filesystem::create_directories(
+					                        parsed_options->workspace.to_boost_path());
+					                    auto output = Si::virtualize_sink(Si::ostream_ref_sink(std::cerr));
+					                    return build(parsed_options->repository, parsed_options->workspace, *maybe_git,
+					                                 *maybe_cmake, output);
+					                })));
+				    assert(maybe_result);
+				    auto const result = maybe_result->get();
+				    switch (result)
+				    {
+				    case build_result::success:
+					    std::cerr << "Build success\n";
+					    break;
 
-				case build_result::failure:
-					std::cerr << "Build failure\n";
-					break;
-				}
-				history.last_result = result;
-			}
-			catch (std::exception const &ex)
-			{
-				std::cerr << "Exception: " << ex.what() << '\n';
-				history.last_result = build_result::failure;
-			}
-			history.is_building = false;
-		});
+				    case build_result::failure:
+					    std::cerr << "Build failure\n";
+					    break;
+				    }
+				    history.last_result = result;
+			    }
+			    catch (std::exception const &ex)
+			    {
+				    std::cerr << "Exception: " << ex.what() << '\n';
+				    history.last_result = build_result::failure;
+			    }
+			    history.is_building = false;
+			});
 	}
 
 	io.run();

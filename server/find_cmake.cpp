@@ -34,10 +34,8 @@ namespace buildserver
 			return Si::none;
 		}
 		return find_file_in_directories(
-			*ventura::path_segment::create("cmake.exe"), {
-			*programs_path / Si::relative_path("CMake/bin"),
-			*programs_path / Si::relative_path("CMake 2.8/bin")
-		});
+		    *ventura::path_segment::create("cmake.exe"),
+		    {*programs_path / Si::relative_path("CMake/bin"), *programs_path / Si::relative_path("CMake 2.8/bin")});
 #else
 		return find_executable_unix(*ventura::path_segment::create("cmake"), {});
 #endif

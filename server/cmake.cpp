@@ -10,25 +10,21 @@ namespace buildserver
 	{
 	}
 
-
-	cmake_exe::cmake_exe(
-		ventura::absolute_path exe)
-		: m_exe(std::move(exe))
+	cmake_exe::cmake_exe(ventura::absolute_path exe)
+	    : m_exe(std::move(exe))
 	{
 	}
 
-	boost::system::error_code cmake_exe::generate(
-		ventura::absolute_path const &source,
-		ventura::absolute_path const &build,
-		boost::unordered_map<std::string, std::string> const &definitions,
-		Si::sink<char, Si::success> &output
-	) const
+	boost::system::error_code cmake_exe::generate(ventura::absolute_path const &source,
+	                                              ventura::absolute_path const &build,
+	                                              boost::unordered_map<std::string, std::string> const &definitions,
+	                                              Si::sink<char, Si::success> &output) const
 	{
 		std::vector<std::string> arguments;
 		arguments.emplace_back(source.to_boost_path().string().c_str());
 		for (auto const &definition : definitions)
 		{
-			//TODO: is this properly encoded in all cases? I guess not
+			// TODO: is this properly encoded in all cases? I guess not
 			auto encoded = "-D" + definition.first + "=" + definition.second;
 			arguments.emplace_back(std::move(encoded));
 		}
@@ -46,16 +42,14 @@ namespace buildserver
 		return {};
 	}
 
-	boost::system::error_code cmake_exe::build(
-		ventura::absolute_path const &build,
-		unsigned cpu_parallelism,
-		Si::sink<char, Si::success> &output
-	) const
+	boost::system::error_code cmake_exe::build(ventura::absolute_path const &build, unsigned cpu_parallelism,
+	                                           Si::sink<char, Si::success> &output) const
 	{
 		std::vector<std::string> arguments{"--build", "."
 #ifndef _WIN32
-			//assuming make..
-			, "--", "-j", boost::lexical_cast<std::string>(cpu_parallelism)
+		                                   // assuming make..
+		                                   ,
+		                                   "--", "-j", boost::lexical_cast<std::string>(cpu_parallelism)
 #endif
 		};
 #ifdef _WIN32

@@ -45,64 +45,58 @@ namespace
 		template <class ActualObserver>
 		void async_get_one(ActualObserver &&observer)
 		{
-			return Si::visit<void>(
-				m_observer_or_notification,
-				[this, &observer](Observer &my_observer) mutable
-				{
-					assert(!my_observer.get());
-					my_observer = Observer(observer);
-				},
-				[this, &observer](notification)
-				{
-					m_observer_or_notification = Observer();
-					std::move(observer).got_element(notification());
-				}
-			);
+			return Si::visit<void>(m_observer_or_notification,
+			                       [this, &observer](Observer &my_observer) mutable
+			                       {
+				                       assert(!my_observer.get());
+				                       my_observer = Observer(observer);
+				                   },
+			                       [this, &observer](notification)
+			                       {
+				                       m_observer_or_notification = Observer();
+				                       std::move(observer).got_element(notification());
+				                   });
 		}
 
 		void notify()
 		{
-			Si::visit<void>(
-				m_observer_or_notification,
-				[this](Observer &observer)
-				{
-					if (observer.get())
-					{
-						Si::exchange(observer, Observer()).got_element(notification());
-					}
-					else
-					{
-						m_observer_or_notification = notification();
-					}
-				},
-				[](notification const &)
-				{
-				}
-			);
+			Si::visit<void>(m_observer_or_notification,
+			                [this](Observer &observer)
+			                {
+				                if (observer.get())
+				                {
+					                Si::exchange(observer, Observer()).got_element(notification());
+				                }
+				                else
+				                {
+					                m_observer_or_notification = notification();
+				                }
+				            },
+			                [](notification const &)
+			                {
+				            });
 		}
 
 	private:
-
 		Si::variant<Observer, notification> m_observer_or_notification;
 	};
 
 	template <class YieldContext, class NotifierObserver>
-	nanoweb::request_handler_result notify(
-		boost::asio::ip::tcp::socket &client,
-		YieldContext &&yield,
-		Si::noexcept_string const &path,
-		Si::noexcept_string const &secret,
-		saturating_notifier<NotifierObserver> &notifier)
+	nanoweb::request_handler_result notify(boost::asio::ip::tcp::socket &client, YieldContext &&yield,
+	                                       Si::noexcept_string const &path, Si::noexcept_string const &secret,
+	                                       saturating_notifier<NotifierObserver> &notifier)
 	{
 		if (std::string::npos == path.find(secret))
 		{
-			nanoweb::quick_final_response(client, yield, "403", "Forbidden", Si::make_c_str_range("the path does not contain the correct secret"));
+			nanoweb::quick_final_response(client, yield, "403", "Forbidden",
+			                              Si::make_c_str_range("the path does not contain the correct secret"));
 			return nanoweb::request_handler_result::handled;
 		}
 
 		notifier.notify();
 
-		nanoweb::quick_final_response(client, yield, "200", "OK", Si::make_c_str_range("the server has been successfully notified"));
+		nanoweb::quick_final_response(client, yield, "200", "OK",
+		                              Si::make_c_str_range("the server has been successfully notified"));
 		return nanoweb::request_handler_result::handled;
 	}
 
@@ -117,69 +111,69 @@ namespace
 		bool is_building = false;
 		Si::optional<build_result> last_result;
 	};
-	
+
 	template <class CharSink, class StepRange>
 	void render_overview_page(CharSink &&rendered, StepRange &&steps)
 	{
 		auto doc = Si::html::make_generator(std::forward<CharSink>(rendered));
 		doc("html", [&]()
-		{
-			doc("head", [&]()
-			{
-				doc("title", [&]()
-				{
-					doc.write("buildserver overview");
-				});
+		    {
+			    doc("head", [&]()
+			        {
+				        doc("title", [&]()
+				            {
+					            doc.write("buildserver overview");
+					        });
+				    });
+			    doc("body", [&]()
+			        {
+				        doc("h1", [&]()
+				            {
+					            doc.write("Overview");
+					        });
+				        doc("table",
+				            [&]()
+				            {
+					            doc.attribute("border", "1");
+					        },
+				            [&]()
+				            {
+					            for (auto &&step : steps)
+					            {
+						            doc("tr", [&]()
+						                {
+							                doc("td", [&]()
+							                    {
+								                    doc.write(step.first);
+								                });
+							                step_history const &history = step.second;
+							                doc("td", [&]()
+							                    {
+								                    doc.write(history.is_building ? "building.." : "idle");
+								                });
+							                doc("td", [&]()
+							                    {
+								                    if (!history.last_result)
+								                    {
+									                    doc.write("not built");
+									                    return;
+								                    }
+								                    doc.write("last build ");
+								                    switch (*history.last_result)
+								                    {
+								                    case build_result::success:
+									                    doc.write("succeeded");
+									                    break;
+								                    case build_result::failure:
+									                    doc.write("failed");
+									                    break;
+								                    }
+								                });
+							            });
+					            }
+					        });
+				    });
 			});
-			doc("body", [&]()
-			{
-				doc("h1", [&]()
-				{
-					doc.write("Overview");
-				});
-				doc("table",
-					[&]()
-				{
-					doc.attribute("border", "1");
-				},
-					[&]()
-				{
-					for (auto &&step : steps)
-					{
-						doc("tr", [&]()
-						{
-							doc("td", [&]()
-							{
-								doc.write(step.first);
-							});
-							step_history const &history = step.second;
-							doc("td", [&]()
-							{
-								doc.write(history.is_building ? "building.." : "idle");
-							});
-							doc("td", [&]()
-							{
-								if (!history.last_result)
-								{
-									doc.write("not built");
-									return;
-								}
-								doc.write("last build ");
-								switch (*history.last_result)
-								{
-								case build_result::success:
-									doc.write("succeeded");
-									break;
-								case build_result::failure:
-									doc.write("failed");
-									break;
-								}
-							});
-						});
-					}
-				});
-			});
-		});
 	}
 
 	struct step_history_registry
@@ -188,30 +182,31 @@ namespace
 	};
 
 	template <class NotifierObserver>
-	nanoweb::request_handler make_root_request_handler(Si::noexcept_string const &secret, saturating_notifier<NotifierObserver> &notifier, step_history_registry const &registry)
+	nanoweb::request_handler make_root_request_handler(Si::noexcept_string const &secret,
+	                                                   saturating_notifier<NotifierObserver> &notifier,
+	                                                   step_history_registry const &registry)
 	{
-		auto handle_request = nanoweb::make_directory({
-			{
-				Si::make_c_str_range(""),
-				nanoweb::request_handler([&registry](boost::asio::ip::tcp::socket &client, Si::http::request const &, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
-				{
-					std::vector<char> content;
-					render_overview_page(Si::make_container_sink(content), registry.name_to_step);
-					nanoweb::quick_final_response(client, yield, "200", "OK", Si::make_memory_range(content));
-					return nanoweb::request_handler_result::handled;
-				})
-			},
-			{
-				Si::make_c_str_range("notify"),
-				nanoweb::request_handler([&secret, &notifier](boost::asio::ip::tcp::socket &client, Si::http::request const &request, Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
-				{
-					return notify(client, yield, request.path, secret, notifier);
-				})
-			}
-		});
+		auto handle_request = nanoweb::make_directory(
+		    {{Si::make_c_str_range(""),
+		      nanoweb::request_handler(
+		          [&registry](boost::asio::ip::tcp::socket &client, Si::http::request const &,
+		                      Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+		          {
+			          std::vector<char> content;
+			          render_overview_page(Si::make_container_sink(content), registry.name_to_step);
+			          nanoweb::quick_final_response(client, yield, "200", "OK", Si::make_memory_range(content));
+			          return nanoweb::request_handler_result::handled;
+			      })},
+		     {Si::make_c_str_range("notify"),
+		      nanoweb::request_handler(
+		          [&secret, &notifier](boost::asio::ip::tcp::socket &client, Si::http::request const &request,
+		                               Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
+		          {
+			          return notify(client, yield, request.path, secret, notifier);
+			      })}});
 		return handle_request;
 	}
-	
+
 	struct options
 	{
 		Si::noexcept_string repository;
@@ -224,15 +219,14 @@ namespace
 	{
 		options result;
 		result.port = 8080;
-		
+
 		boost::program_options::options_description desc("Allowed options");
-		desc.add_options()
-			("help", "produce help message")
-			("repository,r", boost::program_options::value(&result.repository), "the URI for git cloning the code")
-			("port,p", boost::program_options::value(&result.port), "port to listen on for POSTed push notifications")
-			("secret,s", boost::program_options::value(&result.secret), "a string that needs to be in the query for the notification to be accepted")
-			("workspace,w", boost::program_options::value(&result.workspace), "")
-		;
+		desc.add_options()("help", "produce help message")(
+		    "repository,r", boost::program_options::value(&result.repository), "the URI for git cloning the code")(
+		    "port,p", boost::program_options::value(&result.port), "port to listen on for POSTed push notifications")(
+		    "secret,s", boost::program_options::value(&result.secret),
+		    "a string that needs to be in the query for the notification to be accepted")(
+		    "workspace,w", boost::program_options::value(&result.workspace), "");
 
 		boost::program_options::positional_options_description positional;
 		positional.add("repository", 1);
@@ -242,13 +236,12 @@ namespace
 		boost::program_options::variables_map vm;
 		try
 		{
-			boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(desc).positional(positional).run(), vm);
+			boost::program_options::store(
+			    boost::program_options::command_line_parser(argc, argv).options(desc).positional(positional).run(), vm);
 		}
 		catch (boost::program_options::error const &ex)
 		{
-			std::cerr
-				<< ex.what() << '\n'
-				<< desc << "\n";
+			std::cerr << ex.what() << '\n' << desc << "\n";
 			return boost::none;
 		}
 
@@ -256,7 +249,7 @@ namespace
 
 		if (vm.count("help"))
 		{
-		    std::cerr << desc << "\n";
+			std::cerr << desc << "\n";
 			return boost::none;
 		}
 
@@ -276,32 +269,34 @@ namespace
 
 		return std::move(result);
 	}
-	
+
 	int run_process(ventura::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
 	{
 		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
-		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(ventura::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).get());
-		ventura::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(ventura::launch_process(
-			parameters,
-			standard_input.handle,
-			standard_output_and_error.write.handle,
-			standard_output_and_error.write.handle,
-			std::vector<std::pair<Si::os_char const *, Si::os_char const *>>(),
-			ventura::environment_inheritance::inherit
-		).get());
+		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(
+		    ventura::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).get());
+		ventura::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(
+		    ventura::launch_process(parameters, standard_input.handle, standard_output_and_error.write.handle,
+		                            standard_output_and_error.write.handle,
+		                            std::vector<std::pair<Si::os_char const *, Si::os_char const *>>(),
+		                            ventura::environment_inheritance::inherit)
+		        .get());
 		boost::asio::io_service io;
 
 		boost::promise<void> stop_polling;
 		boost::shared_future<void> stopped_polling = stop_polling.get_future().share();
 
-		ventura::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output), std::move(standard_output_and_error.read), stopped_polling);
+		ventura::experimental::read_from_anonymous_pipe(io, Si::ref_sink(output),
+		                                                std::move(standard_output_and_error.read), stopped_polling);
 		standard_output_and_error.write.close();
 		io.run();
 		int exit_code = process.wait_for_exit().get();
 		return exit_code;
 	}
 
-	void git_clone(Si::os_string repository, ventura::absolute_path const &working_directory, ventura::absolute_path const &destination, ventura::absolute_path const &git_exe, Si::sink<char, Si::success> &output)
+	void git_clone(Si::os_string repository, ventura::absolute_path const &working_directory,
+	               ventura::absolute_path const &destination, ventura::absolute_path const &git_exe,
+	               Si::sink<char, Si::success> &output)
 	{
 		ventura::async_process_parameters parameters;
 		parameters.executable = git_exe;
@@ -319,32 +314,34 @@ namespace
 
 namespace example_graph
 {
-	Si::variant<graph::input_type_mismatch, graph::value>
-	clone(graph::value input)
+	Si::variant<graph::input_type_mismatch, graph::value> clone(graph::value input)
 	{
-		auto * const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
+		auto *const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
 		if (!input_listing)
 		{
 			return graph::input_type_mismatch{};
 		}
-		auto * const repository = graph::find_entry_of_type<graph::uri>(**input_listing, "repository");
+		auto *const repository = graph::find_entry_of_type<graph::uri>(**input_listing, "repository");
 		if (!repository)
 		{
 			return graph::input_type_mismatch{};
 		}
-		ventura::absolute_path const * const destination = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "destination");
+		ventura::absolute_path const *const destination =
+		    graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "destination");
 		if (!destination)
 		{
 			return graph::input_type_mismatch{};
 		}
-		ventura::absolute_path const * const git_exe = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "git");
+		ventura::absolute_path const *const git_exe =
+		    graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "git");
 		if (!git_exe)
 		{
 			return graph::input_type_mismatch{};
 		}
 		std::vector<char> output;
 		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
-		git_clone(Si::to_os_string(repository->value), ventura::get_current_working_directory(Si::throw_), *destination, *git_exe, output_sink);
+		git_clone(Si::to_os_string(repository->value), ventura::get_current_working_directory(Si::throw_), *destination,
+		          *git_exe, output_sink);
 
 		graph::listing results;
 		results.entries.insert(std::make_pair("output", graph::blob{std::move(output)}));
@@ -352,25 +349,27 @@ namespace example_graph
 		return graph::value{Si::to_shared(std::move(results))};
 	}
 
-	Si::variant<graph::input_type_mismatch, graph::value>
-	cmake_generate(graph::value input)
+	Si::variant<graph::input_type_mismatch, graph::value> cmake_generate(graph::value input)
 	{
-		auto * const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
+		auto *const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
 		if (!input_listing)
 		{
 			return graph::input_type_mismatch{};
 		}
-		ventura::absolute_path const * const cmake_exe = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "cmake");
+		ventura::absolute_path const *const cmake_exe =
+		    graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "cmake");
 		if (!cmake_exe)
 		{
 			return graph::input_type_mismatch{};
 		}
-		ventura::absolute_path const * const source = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "source");
+		ventura::absolute_path const *const source =
+		    graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "source");
 		if (!source)
 		{
 			return graph::input_type_mismatch{};
 		}
-		ventura::absolute_path const * const build = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "build");
+		ventura::absolute_path const *const build =
+		    graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "build");
 		if (!build)
 		{
 			return graph::input_type_mismatch{};
@@ -379,9 +378,9 @@ namespace example_graph
 		buildserver::cmake_exe cmake(*cmake_exe);
 		std::vector<char> output;
 		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
-		boost::unordered_map<std::string, std::string> definitions; //TODO
+		boost::unordered_map<std::string, std::string> definitions; // TODO
 		boost::system::error_code error = cmake.generate(*source, *build, definitions, output_sink);
-		assert(!error); //TODO
+		assert(!error); // TODO
 
 		graph::listing results;
 		results.entries.insert(std::make_pair("output", graph::blob{std::move(output)}));
@@ -389,25 +388,27 @@ namespace example_graph
 		return graph::value{Si::to_shared(std::move(results))};
 	}
 
-	Si::variant<graph::input_type_mismatch, graph::value>
-	cmake_build(graph::value input)
+	Si::variant<graph::input_type_mismatch, graph::value> cmake_build(graph::value input)
 	{
-		auto * const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
+		auto *const input_listing = Si::try_get_ptr<std::shared_ptr<graph::listing>>(input);
 		if (!input_listing)
 		{
 			return graph::input_type_mismatch{};
 		}
-		ventura::absolute_path const * const cmake_exe = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "cmake");
+		ventura::absolute_path const *const cmake_exe =
+		    graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "cmake");
 		if (!cmake_exe)
 		{
 			return graph::input_type_mismatch{};
 		}
-		ventura::absolute_path const * const build = graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "build");
+		ventura::absolute_path const *const build =
+		    graph::find_entry_of_type<ventura::absolute_path>(**input_listing, "build");
 		if (!build)
 		{
 			return graph::input_type_mismatch{};
 		}
-		std::uint32_t const * const parallelism = graph::find_entry_of_type<std::uint32_t>(**input_listing, "parallelism");
+		std::uint32_t const *const parallelism =
+		    graph::find_entry_of_type<std::uint32_t>(**input_listing, "parallelism");
 		if (!parallelism)
 		{
 			return graph::input_type_mismatch{};
@@ -417,7 +418,7 @@ namespace example_graph
 		std::vector<char> output;
 		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
 		boost::system::error_code error = cmake.build(*build, *parallelism, output_sink);
-		assert(!error); //TODO
+		assert(!error); // TODO
 
 		graph::listing results;
 		results.entries.insert(std::make_pair("output", graph::blob{std::move(output)}));
@@ -453,96 +454,104 @@ int main(int argc, char **argv)
 	saturating_notifier<Si::erased_observer<notification>> notifier;
 	step_history_registry registry;
 
-	nanoweb::request_handler root_request_handler = make_root_request_handler(parsed_options->secret, notifier, registry);
+	nanoweb::request_handler root_request_handler =
+	    make_root_request_handler(parsed_options->secret, notifier, registry);
 	Si::spawn_observable(Si::transform(
-		Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port))),
-		[&root_request_handler](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
-		{
-			auto client = maybe_client.get();
-			Si::spawn_coroutine([client, &root_request_handler](Si::spawn_context yield)
-			{
-				auto error = nanoweb::serve_client(*client, yield, root_request_handler);
-				if (!!error)
-				{
-					std::cerr << client->remote_endpoint().address() << ": " << error << '\n';
-				}
-			});
-			return{};
-		}
-	));
+	    Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(
+	        io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port))),
+	    [&root_request_handler](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
+	    {
+		    auto client = maybe_client.get();
+		    Si::spawn_coroutine([client, &root_request_handler](Si::spawn_context yield)
+		                        {
+			                        auto error = nanoweb::serve_client(*client, yield, root_request_handler);
+			                        if (!!error)
+			                        {
+				                        std::cerr << client->remote_endpoint().address() << ": " << error << '\n';
+			                        }
+			                    });
+		    return {};
+		}));
 
 	registry.name_to_step["silicium"] = step_history();
 
 	for (auto &step : registry.name_to_step)
 	{
 		step_history &history = step.second;
-		Si::spawn_coroutine([&history, &notifier, &io, &parsed_options, &maybe_git, &maybe_cmake](Si::spawn_context yield)
-		{
-			for (;;)
-			{
-				Si::optional<notification> notification_ = yield.get_one(Si::ref(notifier));
-				assert(notification_);
-				std::cerr << "Received a notification\n";
-				try
-				{
-					history.is_building = true;
-					Si::optional<std::future<build_result>> maybe_result = yield.get_one(
-						Si::asio::make_posting_observable(
-						io,
-						Si::make_thread_observable<Si::std_threading>([&]() -> build_result
-						{
-							ventura::absolute_path const &workspace = parsed_options->workspace;
-							boost::filesystem::remove_all(workspace.to_boost_path());
-							boost::filesystem::create_directories(workspace.to_boost_path());
+		Si::spawn_coroutine(
+		    [&history, &notifier, &io, &parsed_options, &maybe_git, &maybe_cmake](Si::spawn_context yield)
+		    {
+			    for (;;)
+			    {
+				    Si::optional<notification> notification_ = yield.get_one(Si::ref(notifier));
+				    assert(notification_);
+				    std::cerr << "Received a notification\n";
+				    try
+				    {
+					    history.is_building = true;
+					    Si::optional<std::future<build_result>> maybe_result =
+					        yield.get_one(Si::asio::make_posting_observable(
+					            io, Si::make_thread_observable<Si::std_threading>(
+					                    [&]() -> build_result
+					                    {
+						                    ventura::absolute_path const &workspace = parsed_options->workspace;
+						                    boost::filesystem::remove_all(workspace.to_boost_path());
+						                    boost::filesystem::create_directories(workspace.to_boost_path());
 
-							ventura::absolute_path const source_dir = workspace / *ventura::path_segment::create("source.git");
-							ventura::absolute_path const build_dir = workspace / *ventura::path_segment::create("build");
+						                    ventura::absolute_path const source_dir =
+						                        workspace / *ventura::path_segment::create("source.git");
+						                    ventura::absolute_path const build_dir =
+						                        workspace / *ventura::path_segment::create("build");
 
-							graph::listing clone_input;
-							clone_input.entries.insert(std::make_pair("repository", graph::uri{parsed_options->repository}));
-							clone_input.entries.insert(std::make_pair("git", *maybe_git));
-							clone_input.entries.insert(std::make_pair("destination", source_dir));
-							graph::value clone_output = expect_value(example_graph::clone(Si::to_shared(std::move(clone_input))));
+						                    graph::listing clone_input;
+						                    clone_input.entries.insert(
+						                        std::make_pair("repository", graph::uri{parsed_options->repository}));
+						                    clone_input.entries.insert(std::make_pair("git", *maybe_git));
+						                    clone_input.entries.insert(std::make_pair("destination", source_dir));
+						                    graph::value clone_output = expect_value(
+						                        example_graph::clone(Si::to_shared(std::move(clone_input))));
 
-							boost::filesystem::create_directories(build_dir.to_boost_path());
+						                    boost::filesystem::create_directories(build_dir.to_boost_path());
 
-							graph::listing generate_input;
-							generate_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
-							generate_input.entries.insert(std::make_pair("source", source_dir));
-							generate_input.entries.insert(std::make_pair("build", build_dir));
-							graph::value generate_output = expect_value(example_graph::cmake_generate(Si::to_shared(std::move(generate_input))));
+						                    graph::listing generate_input;
+						                    generate_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
+						                    generate_input.entries.insert(std::make_pair("source", source_dir));
+						                    generate_input.entries.insert(std::make_pair("build", build_dir));
+						                    graph::value generate_output = expect_value(example_graph::cmake_generate(
+						                        Si::to_shared(std::move(generate_input))));
 
-							graph::listing build_input;
-							build_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
-							build_input.entries.insert(std::make_pair("parallelism", static_cast<std::uint32_t>(4)));
-							build_input.entries.insert(std::make_pair("build", build_dir));
-							graph::value build_output = expect_value(example_graph::cmake_build(Si::to_shared(std::move(build_input))));
+						                    graph::listing build_input;
+						                    build_input.entries.insert(std::make_pair("cmake", *maybe_cmake));
+						                    build_input.entries.insert(
+						                        std::make_pair("parallelism", static_cast<std::uint32_t>(4)));
+						                    build_input.entries.insert(std::make_pair("build", build_dir));
+						                    graph::value build_output = expect_value(
+						                        example_graph::cmake_build(Si::to_shared(std::move(build_input))));
 
-							return build_result::success;
-						}))
-					);
-					assert(maybe_result);
-					auto const result = maybe_result->get();
-					switch (result)
-					{
-					case build_result::success:
-						std::cerr << "Build success\n";
-						break;
+						                    return build_result::success;
+						                })));
+					    assert(maybe_result);
+					    auto const result = maybe_result->get();
+					    switch (result)
+					    {
+					    case build_result::success:
+						    std::cerr << "Build success\n";
+						    break;
 
-					case build_result::failure:
-						std::cerr << "Build failure\n";
-						break;
-					}
-					history.last_result = result;
-				}
-				catch (std::exception const &ex)
-				{
-					std::cerr << "Exception: " << ex.what() << '\n';
-					history.last_result = build_result::failure;
-				}
-				history.is_building = false;
-			}
-		});
+					    case build_result::failure:
+						    std::cerr << "Build failure\n";
+						    break;
+					    }
+					    history.last_result = result;
+				    }
+				    catch (std::exception const &ex)
+				    {
+					    std::cerr << "Exception: " << ex.what() << '\n';
+					    history.last_result = build_result::failure;
+				    }
+				    history.is_building = false;
+			    }
+			});
 	}
 
 	io.run();
