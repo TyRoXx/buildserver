@@ -114,42 +114,42 @@ namespace
 	void render_overview_page(CharSink &&rendered, StepRange &&steps)
 	{
 		auto doc = Si::html::make_generator(std::forward<CharSink>(rendered));
-		doc("html", [&]()
+		doc("html", [&]
 		    {
-			    doc("head", [&]()
+			    doc("head", [&]
 			        {
-				        doc("title", [&]()
+				        doc("title", [&]
 				            {
 					            doc.write("buildserver overview");
 					        });
 				    });
-			    doc("body", [&]()
+			    doc("body", [&]
 			        {
-				        doc("h1", [&]()
+				        doc("h1", [&]
 				            {
 					            doc.write("Overview");
 					        });
 				        doc("table",
-				            [&]()
+				            [&]
 				            {
 					            doc.attribute("border", "1");
 					        },
-				            [&]()
+				            [&]
 				            {
 					            for (auto &&step : steps)
 					            {
-						            doc("tr", [&]()
+						            doc("tr", [&]
 						                {
-							                doc("td", [&]()
+							                doc("td", [&]
 							                    {
 								                    doc.write(step.first);
 								                });
 							                step_history const &history = step.second;
-							                doc("td", [&]()
+							                doc("td", [&]
 							                    {
 								                    doc.write(history.is_building ? "building.." : "idle");
 								                });
-							                doc("td", [&]()
+							                doc("td", [&]
 							                    {
 								                    if (!history.last_result)
 								                    {
