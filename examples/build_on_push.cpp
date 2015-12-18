@@ -276,7 +276,7 @@ namespace
 		return std::move(result);
 	}
 
-	int run_process(ventura::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
+	int run_process(ventura::async_process_parameters const &parameters, Si::Sink<char, Si::success>::interface &output)
 	{
 		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
 		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(
@@ -302,7 +302,7 @@ namespace
 
 	void git_clone(git_repository_address const &repository, ventura::absolute_path const &destination,
 	               ventura::path_segment const &clone_name, ventura::absolute_path const &git_exe,
-	               Si::sink<char, Si::success> &output)
+	               Si::Sink<char, Si::success>::interface &output)
 	{
 		ventura::async_process_parameters parameters;
 		parameters.executable = git_exe;
@@ -317,7 +317,7 @@ namespace
 		}
 	}
 
-	build_result run_test(ventura::absolute_path const &build_dir, Si::sink<char, Si::success> &output)
+	build_result run_test(ventura::absolute_path const &build_dir, Si::Sink<char, Si::success>::interface &output)
 	{
 		ventura::absolute_path const test_dir = build_dir / "test";
 		ventura::absolute_path const test_exe = test_dir / "unit_test";
@@ -337,7 +337,7 @@ namespace
 
 	build_result build(git_repository_address const &repository, ventura::absolute_path const &workspace,
 	                   ventura::absolute_path const &git, ventura::absolute_path const &cmake,
-	                   Si::sink<char, Si::success> &output)
+	                   Si::Sink<char, Si::success>::interface &output)
 	{
 		ventura::path_segment const clone_name = *ventura::path_segment::create("source.git");
 		git_clone(repository, workspace, clone_name, git, output);

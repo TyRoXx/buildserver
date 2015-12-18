@@ -270,7 +270,7 @@ namespace
 		return std::move(result);
 	}
 
-	int run_process(ventura::async_process_parameters const &parameters, Si::sink<char, Si::success> &output)
+	int run_process(ventura::async_process_parameters const &parameters, Si::Sink<char, Si::success>::interface &output)
 	{
 		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
 		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(
@@ -296,7 +296,7 @@ namespace
 
 	void git_clone(Si::os_string repository, ventura::absolute_path const &working_directory,
 	               ventura::absolute_path const &destination, ventura::absolute_path const &git_exe,
-	               Si::sink<char, Si::success> &output)
+	               Si::Sink<char, Si::success>::interface &output)
 	{
 		ventura::async_process_parameters parameters;
 		parameters.executable = git_exe;

@@ -18,7 +18,7 @@ namespace buildserver
 	boost::system::error_code cmake_exe::generate(ventura::absolute_path const &source,
 	                                              ventura::absolute_path const &build,
 	                                              boost::unordered_map<std::string, std::string> const &definitions,
-	                                              Si::sink<char, Si::success> &output) const
+	                                              Si::Sink<char, Si::success>::interface &output) const
 	{
 		std::vector<std::string> arguments;
 		arguments.emplace_back(source.to_boost_path().string().c_str());
@@ -43,7 +43,7 @@ namespace buildserver
 	}
 
 	boost::system::error_code cmake_exe::build(ventura::absolute_path const &build, unsigned cpu_parallelism,
-	                                           Si::sink<char, Si::success> &output) const
+	                                           Si::Sink<char, Si::success>::interface &output) const
 	{
 		std::vector<std::string> arguments{"--build", "."
 #ifndef _WIN32
