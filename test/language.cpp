@@ -222,11 +222,16 @@ namespace
 		std::unique_ptr<expression> repeated;
 	};
 
+	struct new_type
+	{
+		std::unique_ptr<expression> original;
+	};
+
 	struct expression
 	{
 		Si::variant<match, literal, named_value, equal, less, not_, constrain, lambda, bound_value, symbol_value,
 		            make_tuple, tuple_at, make_variant, visit_variant, return_from_function, break_loop, block,
-		            assignment, loop> content;
+		            assignment, loop, new_type> content;
 	};
 
 	struct module_declaration
