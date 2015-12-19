@@ -17,7 +17,6 @@ addons:
     - g++-4.9
     - g++-4.8
     - g++-4.7
-    - g++-4.6
     - libboost1.55-all-dev
     - liblua51-dev
     - liburiparser-dev
@@ -33,8 +32,6 @@ env:
  - CPP=g++-4.8 BUILD_TYPE=Debug
  - CPP=g++-4.7 BUILD_TYPE=Debug
  - CPP=g++-4.7 BUILD_TYPE=Release
- - CPP=g++-4.6 BUILD_TYPE=Debug
- - CPP=g++-4.6 BUILD_TYPE=Release
 
 before_install:
  - git submodule update --init --recursive
