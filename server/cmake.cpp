@@ -17,15 +17,15 @@ namespace buildserver
 
 	boost::system::error_code cmake_exe::generate(ventura::absolute_path const &source,
 	                                              ventura::absolute_path const &build,
-	                                              boost::unordered_map<std::string, std::string> const &definitions,
+	                                              boost::unordered_map<Si::os_string, Si::os_string> const &definitions,
 	                                              Si::Sink<char, Si::success>::interface &output) const
 	{
-		std::vector<std::string> arguments;
-		arguments.emplace_back(source.to_boost_path().string().c_str());
+		std::vector<Si::os_string> arguments;
+		arguments.emplace_back(to_os_string(source));
 		for (auto const &definition : definitions)
 		{
 			// TODO: is this properly encoded in all cases? I guess not
-			auto encoded = "-D" + definition.first + "=" + definition.second;
+			Si::os_string encoded = SILICIUM_OS_STR("-D") + definition.first + SILICIUM_OS_STR("=") + definition.second;
 			arguments.emplace_back(std::move(encoded));
 		}
 		ventura::process_parameters parameters;
@@ -45,11 +45,11 @@ namespace buildserver
 	boost::system::error_code cmake_exe::build(ventura::absolute_path const &build, unsigned cpu_parallelism,
 	                                           Si::Sink<char, Si::success>::interface &output) const
 	{
-		std::vector<std::string> arguments{"--build", "."
+		std::vector<Si::os_string> arguments{SILICIUM_OS_STR("--build"), SILICIUM_OS_STR(".")
 #ifndef _WIN32
-		                                   // assuming make..
-		                                   ,
-		                                   "--", "-j", boost::lexical_cast<std::string>(cpu_parallelism)
+		                                     // assuming make..
+		                                     ,
+		                                     "--", "-j", boost::lexical_cast<std::string>(cpu_parallelism)
 #endif
 		};
 #ifdef _WIN32

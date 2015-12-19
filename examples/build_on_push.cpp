@@ -309,7 +309,7 @@ namespace
 		parameters.current_path = destination;
 		parameters.arguments.emplace_back(Si::to_os_string("clone"));
 		parameters.arguments.emplace_back(repository);
-		parameters.arguments.emplace_back((destination / clone_name).c_str());
+		parameters.arguments.emplace_back(to_os_string(destination / clone_name));
 		int exit_code = run_process(parameters, output);
 		if (exit_code != 0)
 		{
@@ -348,7 +348,7 @@ namespace
 
 		buildserver::cmake_exe cmake_builder(cmake);
 		boost::system::error_code error =
-		    cmake_builder.generate(source, build, boost::unordered_map<std::string, std::string>{}, output);
+		    cmake_builder.generate(source, build, boost::unordered_map<Si::os_string, Si::os_string>{}, output);
 		if (error)
 		{
 			boost::throw_exception(boost::system::system_error(error));

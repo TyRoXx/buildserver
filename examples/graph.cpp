@@ -303,7 +303,7 @@ namespace
 		parameters.current_path = working_directory;
 		parameters.arguments.emplace_back(Si::to_os_string("clone"));
 		parameters.arguments.emplace_back(std::move(repository));
-		parameters.arguments.emplace_back(destination.c_str());
+		parameters.arguments.emplace_back(to_os_string(destination));
 		int exit_code = run_process(parameters, output);
 		if (exit_code != 0)
 		{
@@ -378,7 +378,7 @@ namespace example_graph
 		buildserver::cmake_exe cmake(*cmake_exe);
 		std::vector<char> output;
 		auto output_sink = Si::virtualize_sink(Si::make_container_sink(output));
-		boost::unordered_map<std::string, std::string> definitions; // TODO
+		boost::unordered_map<Si::os_string, Si::os_string> definitions; // TODO
 		boost::system::error_code error = cmake.generate(*source, *build, definitions, output_sink);
 		assert(!error); // TODO
 

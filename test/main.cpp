@@ -25,7 +25,7 @@ BOOST_AUTO_TEST_CASE(cmake_exe_test)
 	ventura::absolute_path const resources_path = *ventura::absolute_path::create(
 	    boost::filesystem::path(__FILE__).parent_path().parent_path() / "test-resources");
 	Si::virtualized_sink<Si::null_sink<char, Si::success>> ignored;
-	cmake_driver.generate(resources_path / "test1", build_path, boost::unordered_map<std::string, std::string>{},
+	cmake_driver.generate(resources_path / "test1", build_path, boost::unordered_map<Si::os_string, Si::os_string>{},
 	                      ignored);
 	cmake_driver.build(build_path, boost::thread::hardware_concurrency(), ignored);
 	ventura::absolute_path const built_exe = build_path
