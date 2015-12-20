@@ -278,15 +278,15 @@ namespace
 
 	int run_process(ventura::async_process_parameters const &parameters, Si::Sink<char, Si::success>::interface &output)
 	{
-		Si::pipe standard_output_and_error = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(Si::make_pipe().get());
-		Si::file_handle standard_input = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(
-		    ventura::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).get());
-		ventura::async_process process = SILICIUM_MOVE_IF_COMPILER_LACKS_RVALUE_QUALIFIERS(
+		Si::pipe standard_output_and_error = Si::make_pipe().move_value();
+		Si::file_handle standard_input =
+		    ventura::open_reading(Si::native_path_string(SILICIUM_SYSTEM_LITERAL("/dev/null"))).move_value();
+		ventura::async_process process =
 		    ventura::launch_process(parameters, standard_input.handle, standard_output_and_error.write.handle,
 		                            standard_output_and_error.write.handle,
 		                            std::vector<std::pair<Si::os_char const *, Si::os_char const *>>(),
 		                            ventura::environment_inheritance::inherit)
-		        .get());
+		        .move_value();
 		boost::asio::io_service io;
 
 		boost::promise<void> stop_polling;
