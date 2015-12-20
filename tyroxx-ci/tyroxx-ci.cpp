@@ -79,10 +79,10 @@ namespace
 		Si::variant<Observer, notification> m_observer_or_notification;
 	};
 
-	template <class YieldContext, class NotifierObserver>
-	nanoweb::request_handler_result notify(boost::asio::ip::tcp::socket &client, YieldContext &&yield,
+	template <class YieldContext>
+	nanoweb::request_handler_result handle_notify_request(boost::asio::ip::tcp::socket &client, YieldContext &&yield,
 	                                       Si::noexcept_string const &path, Si::noexcept_string const &secret,
-	                                       saturating_notifier<NotifierObserver> &notifier)
+	                                       Si::function<void()> const &notify)
 	{
 		if (std::string::npos == path.find(secret))
 		{
@@ -91,7 +91,7 @@ namespace
 			return nanoweb::request_handler_result::handled;
 		}
 
-		notifier.notify();
+		notify();
 
 		nanoweb::quick_final_response(client, yield, "200", "OK",
 		                              Si::make_c_str_range("the server has been successfully notified"));
@@ -179,9 +179,8 @@ namespace
 		std::map<Si::noexcept_string, step_history> name_to_step;
 	};
 
-	template <class NotifierObserver>
 	nanoweb::request_handler make_root_request_handler(Si::noexcept_string const &secret,
-	                                                   saturating_notifier<NotifierObserver> &notifier,
+	                                                   Si::function<void()> const &notify_,
 	                                                   step_history_registry const &registry)
 	{
 		auto handle_request = nanoweb::make_directory(
@@ -197,10 +196,10 @@ namespace
 			      })},
 		     {Si::make_c_str_range("notify"),
 		      nanoweb::request_handler(
-		          [&secret, &notifier](boost::asio::ip::tcp::socket &client, Si::http::request const &request,
+		          [&secret, notify_](boost::asio::ip::tcp::socket &client, Si::http::request const &request,
 		                               Si::iterator_range<Si::memory_range const *>, Si::spawn_context yield)
 		          {
-			          return notify(client, yield, request.path, secret, notifier);
+			          return handle_notify_request(client, yield, request.path, secret, notify_);
 			      })}});
 		return handle_request;
 	}
@@ -371,7 +370,7 @@ namespace
 		step_history_registry registry;
 
 		nanoweb::request_handler root_request_handler =
-			make_root_request_handler(options.secret, notifier, registry);
+			make_root_request_handler(options.secret, [&notifier] { notifier.notify(); }, registry);
 		Si::spawn_observable(Si::transform(
 			Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(
 				io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), options.port))),
