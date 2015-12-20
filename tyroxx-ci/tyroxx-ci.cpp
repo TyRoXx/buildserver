@@ -21,6 +21,7 @@
 #include <ventura/async_process.hpp>
 #include <ventura/absolute_path.hpp>
 #include <ventura/path_segment.hpp>
+#include <ventura/file_operations.hpp>
 #include <boost/program_options.hpp>
 #include <boost/optional.hpp>
 #include <boost/range/algorithm/equal.hpp>
@@ -343,7 +344,7 @@ namespace
 		ventura::absolute_path const source = workspace / clone_name;
 
 		ventura::absolute_path const build = workspace / "build";
-		boost::filesystem::create_directories(build.to_boost_path());
+		ventura::create_directories(build, Si::throw_);
 
 		buildserver::cmake_exe cmake_builder(cmake);
 		boost::system::error_code error =
@@ -376,10 +377,10 @@ namespace
 				io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), options.port))),
 			[&root_request_handler](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
 		{
-			auto client = maybe_client.get();
+			std::shared_ptr<boost::asio::ip::tcp::socket> client = maybe_client.get();
 			Si::spawn_coroutine([client, &root_request_handler](Si::spawn_context yield)
 			{
-				auto error = nanoweb::serve_client(*client, yield, root_request_handler);
+				boost::system::error_code const error = nanoweb::serve_client(*client, yield, root_request_handler);
 				if (!!error)
 				{
 					std::cerr << client->remote_endpoint().address() << ": " << error << '\n';
@@ -407,9 +408,7 @@ namespace
 							io, Si::make_thread_observable<Si::std_threading>(
 								[&]()
 					{
-						boost::filesystem::remove_all(options.workspace.to_boost_path());
-						boost::filesystem::create_directories(
-							options.workspace.to_boost_path());
+						ventura::recreate_directories(options.workspace, Si::throw_);
 						auto output = Si::virtualize_sink(Si::ostream_ref_sink(std::cerr));
 						return build(options.repository, options.workspace, git,
 							cmake, output);
