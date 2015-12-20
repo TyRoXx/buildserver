@@ -362,6 +362,84 @@ namespace
 
 		return run_test(build, output);
 	}
+
+	void run_server(options const &options, ventura::absolute_path const &git, ventura::absolute_path const &cmake)
+	{
+		boost::asio::io_service io;
+
+		saturating_notifier<Si::erased_observer<notification>> notifier;
+		step_history_registry registry;
+
+		nanoweb::request_handler root_request_handler =
+			make_root_request_handler(options.secret, notifier, registry);
+		Si::spawn_observable(Si::transform(
+			Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(
+				io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), options.port))),
+			[&root_request_handler](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
+		{
+			auto client = maybe_client.get();
+			Si::spawn_coroutine([client, &root_request_handler](Si::spawn_context yield)
+			{
+				auto error = nanoweb::serve_client(*client, yield, root_request_handler);
+				if (!!error)
+				{
+					std::cerr << client->remote_endpoint().address() << ": " << error << '\n';
+				}
+			});
+			return{};
+		}));
+
+		registry.name_to_step["silicium"] = step_history();
+
+		for (auto &step : registry.name_to_step)
+		{
+			step_history &history = step.second;
+			Si::spawn_coroutine(
+				[&history, &notifier, &io, &options, &git, &cmake](Si::spawn_context yield)
+			{
+				Si::optional<notification> notification_ = yield.get_one(Si::ref(notifier));
+				assert(notification_);
+				std::cerr << "Received a notification\n";
+				try
+				{
+					history.is_building = true;
+					Si::optional<std::future<build_result>> maybe_result =
+						yield.get_one(Si::asio::make_posting_observable(
+							io, Si::make_thread_observable<Si::std_threading>(
+								[&]()
+					{
+						boost::filesystem::remove_all(options.workspace.to_boost_path());
+						boost::filesystem::create_directories(
+							options.workspace.to_boost_path());
+						auto output = Si::virtualize_sink(Si::ostream_ref_sink(std::cerr));
+						return build(options.repository, options.workspace, git,
+							cmake, output);
+					})));
+					assert(maybe_result);
+					auto const result = maybe_result->get();
+					switch (result)
+					{
+					case build_result::success:
+						std::cerr << "Build success\n";
+						break;
+
+					case build_result::failure:
+						std::cerr << "Build failure\n";
+						break;
+					}
+					history.last_result = result;
+				}
+				catch (std::exception const &ex)
+				{
+					std::cerr << "Exception: " << ex.what() << '\n';
+					history.last_result = build_result::failure;
+				}
+				history.is_building = false;
+			});
+		}
+
+		io.run();
+	}
 }
 
 int main(int argc, char **argv)
@@ -386,78 +464,5 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	boost::asio::io_service io;
-
-	saturating_notifier<Si::erased_observer<notification>> notifier;
-	step_history_registry registry;
-
-	nanoweb::request_handler root_request_handler =
-	    make_root_request_handler(parsed_options->secret, notifier, registry);
-	Si::spawn_observable(Si::transform(
-	    Si::asio::make_tcp_acceptor(boost::asio::ip::tcp::acceptor(
-	        io, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), parsed_options->port))),
-	    [&root_request_handler](Si::asio::tcp_acceptor_result maybe_client) -> Si::nothing
-	    {
-		    auto client = maybe_client.get();
-		    Si::spawn_coroutine([client, &root_request_handler](Si::spawn_context yield)
-		                        {
-			                        auto error = nanoweb::serve_client(*client, yield, root_request_handler);
-			                        if (!!error)
-			                        {
-				                        std::cerr << client->remote_endpoint().address() << ": " << error << '\n';
-			                        }
-			                    });
-		    return {};
-		}));
-
-	registry.name_to_step["silicium"] = step_history();
-
-	for (auto &step : registry.name_to_step)
-	{
-		step_history &history = step.second;
-		Si::spawn_coroutine(
-		    [&history, &notifier, &io, &parsed_options, &maybe_git, &maybe_cmake](Si::spawn_context yield)
-		    {
-			    Si::optional<notification> notification_ = yield.get_one(Si::ref(notifier));
-			    assert(notification_);
-			    std::cerr << "Received a notification\n";
-			    try
-			    {
-				    history.is_building = true;
-				    Si::optional<std::future<build_result>> maybe_result =
-				        yield.get_one(Si::asio::make_posting_observable(
-				            io, Si::make_thread_observable<Si::std_threading>(
-				                    [&]()
-				                    {
-					                    boost::filesystem::remove_all(parsed_options->workspace.to_boost_path());
-					                    boost::filesystem::create_directories(
-					                        parsed_options->workspace.to_boost_path());
-					                    auto output = Si::virtualize_sink(Si::ostream_ref_sink(std::cerr));
-					                    return build(parsed_options->repository, parsed_options->workspace, *maybe_git,
-					                                 *maybe_cmake, output);
-					                })));
-				    assert(maybe_result);
-				    auto const result = maybe_result->get();
-				    switch (result)
-				    {
-				    case build_result::success:
-					    std::cerr << "Build success\n";
-					    break;
-
-				    case build_result::failure:
-					    std::cerr << "Build failure\n";
-					    break;
-				    }
-				    history.last_result = result;
-			    }
-			    catch (std::exception const &ex)
-			    {
-				    std::cerr << "Exception: " << ex.what() << '\n';
-				    history.last_result = build_result::failure;
-			    }
-			    history.is_building = false;
-			});
-	}
-
-	io.run();
+	run_server(*parsed_options, *maybe_git, *maybe_cmake);
 }
