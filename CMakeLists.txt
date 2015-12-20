@@ -78,6 +78,7 @@ include_directories(".")
 add_subdirectory("server")
 add_subdirectory("server-cli")
 add_subdirectory("examples")
+add_subdirectory("tyroxx-ci")
 add_subdirectory("test")
 
 if(WIN32)

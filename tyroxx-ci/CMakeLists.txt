@@ -1,0 +1,5 @@
+if(URIPARSER_FOUND)
+	file(GLOB nanowebSources "../nanoweb/*.hpp")
+	add_executable(tyroxx-ci tyroxx-ci.cpp ${nanowebSources})
+	target_link_libraries(tyroxx-ci buildserver ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${URIPARSER_LIBRARY})
+endif()
