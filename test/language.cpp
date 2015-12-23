@@ -187,11 +187,6 @@ namespace
 		std::unique_ptr<expression> index;
 	};
 
-	struct make_variant
-	{
-		std::unique_ptr<expression> content;
-	};
-
 	struct visit_variant
 	{
 		std::vector<expression> visitors;
@@ -230,7 +225,7 @@ namespace
 	struct expression
 	{
 		Si::variant<match, literal, named_value, equal, less, not_, constrain, lambda, bound_value, symbol_value,
-		            make_tuple, tuple_at, make_variant, visit_variant, return_from_function, break_loop, block,
+		            make_tuple, tuple_at, visit_variant, return_from_function, break_loop, block,
 		            assignment, loop, new_type> content;
 	};
 
