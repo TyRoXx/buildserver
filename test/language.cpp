@@ -24,6 +24,22 @@ namespace
 		std::vector<value> elements;
 	};
 
+	struct identifier
+	{
+		std::string value;
+	};
+
+	struct struct_type
+	{
+		struct element
+		{
+			std::unique_ptr<type> type_of;
+			identifier name;
+		};
+
+		std::vector<element> elements;
+	};
+
 	struct tuple_type
 	{
 		std::vector<type> elements;
@@ -32,11 +48,6 @@ namespace
 	struct extern_function
 	{
 		Si::function<value(value const &)> call;
-	};
-
-	struct identifier
-	{
-		std::string value;
 	};
 
 	struct identifier_type
@@ -85,8 +96,8 @@ namespace
 
 	struct type
 	{
-		Si::variant<integer_type, tuple_type, function_type, constrained_type, type_type, variant_type, identifier_type>
-		    content;
+		Si::variant<integer_type, tuple_type, struct_type, function_type, constrained_type, type_type, variant_type,
+		            identifier_type> content;
 	};
 
 	struct value
@@ -189,21 +200,19 @@ namespace
 
 	struct visit_variant
 	{
+		std::unique_ptr<expression> variant;
 		std::vector<expression> visitors;
-	};
-
-	struct return_from_function
-	{
-		value result;
 	};
 
 	struct break_loop
 	{
+		std::unique_ptr<expression> result;
 	};
 
 	struct block
 	{
 		std::vector<expression> steps;
+		std::unique_ptr<expression> result;
 	};
 
 	struct assignment
@@ -217,6 +226,11 @@ namespace
 		std::unique_ptr<expression> repeated;
 	};
 
+	struct return_from_function
+	{
+		std::unique_ptr<expression> result;
+	};
+
 	struct new_type
 	{
 		std::unique_ptr<expression> original;
@@ -225,8 +239,8 @@ namespace
 	struct expression
 	{
 		Si::variant<match, literal, named_value, equal, less, not_, constrain, lambda, bound_value, symbol_value,
-		            make_tuple, tuple_at, visit_variant, return_from_function, break_loop, block,
-		            assignment, loop, new_type> content;
+		            make_tuple, tuple_at, visit_variant, return_from_function, break_loop, block, assignment, loop,
+		            new_type> content;
 	};
 
 	struct module_declaration
