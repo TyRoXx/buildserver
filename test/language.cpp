@@ -41,7 +41,7 @@ namespace
 	{
 		struct element
 		{
-			std::unique_ptr<type> type_of;
+			std::shared_ptr<type const> type_of;
 			identifier name;
 		};
 
@@ -62,11 +62,6 @@ namespace
 	{
 	};
 
-	struct variant
-	{
-		std::unique_ptr<value> content;
-	};
-
 	struct expression;
 
 	struct declaration
@@ -78,19 +73,35 @@ namespace
 	struct closure
 	{
 		std::vector<value> bound;
-		std::unique_ptr<expression> body;
+		std::shared_ptr<expression const> body;
 	};
 
 	struct function_type
 	{
-		std::unique_ptr<type> parameter;
-		std::unique_ptr<type> result;
+		std::shared_ptr<type const> parameter;
+		std::shared_ptr<type const> result;
+
+		explicit function_type(std::shared_ptr<type const> parameter, std::shared_ptr<type const> result)
+		    : parameter(std::move(parameter))
+		    , result(std::move(result))
+		{
+		}
+	};
+
+	struct generic_function_type
+	{
+		std::shared_ptr<type const> parameter;
+
+		explicit generic_function_type(std::shared_ptr<type const> parameter)
+		    : parameter(std::move(parameter))
+		{
+		}
 	};
 
 	struct constrained_type
 	{
-		std::unique_ptr<type> original;
-		std::unique_ptr<closure> is_valid;
+		std::shared_ptr<type const> original;
+		std::shared_ptr<closure const> is_valid;
 	};
 
 	struct variant_type
@@ -104,8 +115,8 @@ namespace
 
 	struct type
 	{
-		Si::variant<integer_type, tuple_type, struct_type, function_type, constrained_type, type_type, variant_type,
-		            identifier_type> content;
+		Si::variant<integer_type, tuple_type, struct_type, function_type, generic_function_type, constrained_type,
+		            type_type, variant_type, identifier_type> content;
 
 		explicit type(decltype(content) content)
 		    : content(std::move(content))
@@ -115,7 +126,7 @@ namespace
 
 	struct value
 	{
-		Si::variant<integer, tuple, closure, extern_function, type, variant, identifier> content;
+		Si::variant<integer, tuple, closure, extern_function, type, identifier> content;
 
 		explicit value(decltype(content) content)
 		    : content(std::move(content))
@@ -267,7 +278,7 @@ namespace
 
 	struct new_type
 	{
-		std::unique_ptr<expression> original;
+		std::shared_ptr<expression const> original;
 	};
 
 	struct argument
@@ -322,6 +333,231 @@ namespace
 		std::vector<module_name> imports;
 		std::vector<exported> exports;
 	};
+
+	type type_of(value const &root)
+	{
+		return Si::visit<type>(root.content,
+		                       [](integer const &content) -> type
+		                       {
+			                       throw std::logic_error("not implemented");
+			                   },
+		                       [](tuple const &content) -> type
+		                       {
+			                       throw std::logic_error("not implemented");
+			                   },
+		                       [](closure const &content) -> type
+		                       {
+			                       throw std::logic_error("not implemented");
+			                   },
+		                       [](extern_function const &content) -> type
+		                       {
+			                       throw std::logic_error("not implemented");
+			                   },
+		                       [](type const &content) -> type
+		                       {
+			                       return type(type_type());
+			                   },
+		                       [](identifier const &content) -> type
+		                       {
+			                       throw std::logic_error("not implemented");
+			                   });
+	}
+
+	Si::optional<value> evaluate(expression const &root, Si::optional<value const &> argument_)
+	{
+		return Si::visit<Si::optional<value>>(root.content,
+		                                      [](match const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](literal const &content) -> value
+		                                      {
+			                                      return content.literal_value;
+			                                  },
+		                                      [](local_value const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](equal const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](less const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](not_ const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](constrain const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](lambda const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](bound_value const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](symbol_value const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](make_tuple const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](tuple_at const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](visit_variant const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](return_from_function const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](break_loop const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](block const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](assignment const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](loop const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [](new_type const &content) -> value
+		                                      {
+			                                      throw std::logic_error("not implemented");
+			                                  },
+		                                      [&argument_](argument const &) -> Si::optional<value>
+		                                      {
+			                                      if (!argument_)
+			                                      {
+				                                      return Si::none;
+			                                      }
+			                                      return *argument_;
+			                                  });
+	}
+
+	Si::optional<type> type_of(expression const &root, Si::optional<type const &> argument_type,
+	                           Si::optional<value const &> argument_)
+	{
+		return Si::visit<Si::optional<type>>(
+		    root.content,
+		    [](match const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](literal const &content) -> type
+		    {
+			    return type_of(content.literal_value);
+			},
+		    [](local_value const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](equal const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](less const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](not_ const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](constrain const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [&argument_type, &argument_](lambda const &content) -> Si::optional<type>
+		    {
+			    Si::optional<value> parameter_evaluated = evaluate(*content.parameter, argument_);
+			    if (!parameter_evaluated)
+			    {
+				    return Si::none;
+			    }
+			    type *const parameter = Si::try_get_ptr<type>(parameter_evaluated->content);
+			    if (!parameter)
+			    {
+				    throw std::logic_error("not implemented");
+			    }
+			    Si::optional<type> result =
+			        type_of(*content.body, parameter ? Si::optional<type const &>(*parameter) : Si::none, Si::none);
+			    if (result)
+			    {
+				    return type(function_type(Si::to_unique(std::move(*parameter)), Si::to_unique(std::move(*result))));
+			    }
+			    return type(generic_function_type(Si::to_unique(std::move(*parameter))));
+			},
+		    [](bound_value const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](symbol_value const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](make_tuple const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](tuple_at const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](visit_variant const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [&argument_type, &argument_](return_from_function const &content) -> Si::optional<type>
+		    {
+			    return type_of(*content.result, argument_type, argument_);
+			},
+		    [](break_loop const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](block const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](assignment const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](loop const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [](new_type const &content) -> type
+		    {
+			    throw std::logic_error("not implemented");
+			},
+		    [&argument_type](argument const &) -> Si::optional<type>
+		    {
+			    if (argument_type)
+			    {
+				    return type(*argument_type);
+			    }
+			    return Si::none;
+			});
+	}
 
 	typedef Si::Sink<char, Si::success>::interface text_writer;
 
@@ -417,7 +653,15 @@ namespace
 			            },
 		                [&writer](function_type const &content)
 		                {
-			                throw std::logic_error("not implemented");
+			                pretty_print(writer, *content.parameter);
+			                print(writer, " -> ");
+			                pretty_print(writer, *content.result);
+			            },
+		                [&writer](generic_function_type const &content)
+		                {
+			                pretty_print(writer, *content.parameter);
+			                print(writer, " -> ");
+			                print(writer, "%generic");
 			            },
 		                [&writer](constrained_type const &content)
 		                {
@@ -476,10 +720,6 @@ namespace
 		                [&writer](type const &content)
 		                {
 			                pretty_print(writer, content);
-			            },
-		                [&writer](variant const &content)
-		                {
-			                throw std::logic_error("not implemented");
 			            },
 		                [&writer](identifier const &content)
 		                {
@@ -587,6 +827,16 @@ namespace
 		for (module_definition::exported const &exported : root.exports)
 		{
 			print(writer, exported.key.value, ": ");
+			Si::optional<type> type_ = type_of(exported.value, Si::none, Si::none);
+			if (type_)
+			{
+				pretty_print(writer, *type_);
+			}
+			else
+			{
+				print(writer, "%generic");
+			}
+			print(writer, " = ");
 			pretty_print(writer, exported.value);
 			print(writer, "\n");
 		}
