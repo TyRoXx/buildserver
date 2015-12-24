@@ -535,7 +535,7 @@ namespace
 			    }
 			    return value(closure(Si::to_shared(std::move(*new_bound)), content.body));
 			},
-		    [&bound](bound_value const &content) -> Si::optional<value>
+		    [&bound](bound_value const &) -> Si::optional<value>
 		    {
 			    return bound ? Si::optional<value>(*bound) : Si::none;
 			},
@@ -1080,8 +1080,6 @@ BOOST_AUTO_TEST_CASE(language_integer_identity)
 
 BOOST_AUTO_TEST_CASE(language_generic_identity)
 {
-	return; // TODO
-
 	module_definition m;
 
 	m.exports.emplace_back(module_definition::exported(
@@ -1095,11 +1093,13 @@ BOOST_AUTO_TEST_CASE(language_generic_identity)
 
 	m.exports.emplace_back(module_definition::exported(
 	    identifier("call generic identity"),
-	    expression(lambda(
-	        Si::make_unique<expression>(literal(make_unit())),
-	        Si::make_unique<expression>(literal(value(make_unit_type()))),
-	        Si::make_unique<expression>(call(Si::make_unique<expression>(local_symbol(identifier("generic identity"))),
-	                                         Si::make_unique<expression>(literal(value(integer(456))))))))));
+	    expression(lambda(Si::make_unique<expression>(literal(make_unit())),
+	                      Si::make_unique<expression>(literal(value(make_unit_type()))),
+	                      Si::make_unique<expression>(
+	                          call(Si::make_unique<expression>(
+	                                   call(Si::make_unique<expression>(local_symbol(identifier("generic identity"))),
+	                                        Si::make_unique<expression>(literal(value(type(integer_type())))))),
+	                               Si::make_unique<expression>(literal(value(integer(456))))))))));
 
 	local_symbol_table symbols(m.exports);
 
