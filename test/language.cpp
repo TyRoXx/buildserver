@@ -93,8 +93,14 @@ namespace
 
 	struct closure
 	{
-		std::vector<value> bound;
+		std::shared_ptr<value const> bound;
 		std::shared_ptr<expression const> body;
+
+		closure(std::shared_ptr<value const> bound, std::shared_ptr<expression const> body)
+		    : bound(std::move(bound))
+		    , body(std::move(body))
+		{
+		}
 	};
 
 	struct function_type
@@ -221,10 +227,10 @@ namespace
 	{
 		std::unique_ptr<expression> bound;
 		std::unique_ptr<expression> parameter;
-		std::unique_ptr<expression> body;
+		std::shared_ptr<expression const> body;
 
 		lambda(std::unique_ptr<expression> bound, std::unique_ptr<expression> parameter,
-		       std::unique_ptr<expression> body)
+		       std::shared_ptr<expression const> body)
 		    : bound(std::move(bound))
 		    , parameter(std::move(parameter))
 		    , body(std::move(body))
@@ -371,11 +377,14 @@ namespace
 	Si::optional<type> type_of(expression const &root, Si::optional<type const &> argument_type,
 	                           Si::optional<value const &> argument_, local_symbol_table &symbols);
 
+	Si::optional<value> evaluate(expression const &root, Si::optional<value const &> argument_);
+
 	struct local_symbol_table
 	{
 		struct symbol_info
 		{
 			Si::optional<type> known_type;
+			Si::optional<value> known_value;
 			bool is_being_evaluated;
 
 			symbol_info()
@@ -426,6 +435,37 @@ namespace
 			}
 			info.known_type = std::move(*calculated_type);
 			return info.known_type;
+		}
+
+		Si::optional<value> evaluate(identifier const &symbol, Si::optional<value const &> argument_)
+		{
+			auto const found =
+			    std::find_if(exports.begin(), exports.end(), [&symbol](module_definition::exported const &exported)
+			                 {
+				                 return exported.key == symbol;
+				             });
+			if (found == exports.end())
+			{
+				throw std::logic_error("not implemented");
+			}
+			symbol_info &info = symbols[symbol];
+			if (info.is_being_evaluated)
+			{
+				throw std::invalid_argument("Value of symbol " + symbol.value + " depends on itself");
+			}
+			info.is_being_evaluated = true;
+			BOOST_SCOPE_EXIT(&info)
+			{
+				info.is_being_evaluated = false;
+			}
+			BOOST_SCOPE_EXIT_END;
+			Si::optional<value> calculated_value = ::evaluate(found->value, argument_);
+			if (!calculated_value)
+			{
+				return Si::none;
+			}
+			info.known_value = std::move(*calculated_value);
+			return info.known_value;
 		}
 	};
 
@@ -982,28 +1022,17 @@ namespace
 			print(writer, "\n");
 		}
 	}
-
-	// TODO
-	module_instance instantiate_module(module_definition const &definition, Si::array_view<module_instance> imports);
 }
 
-BOOST_AUTO_TEST_CASE(language_trivial)
+BOOST_AUTO_TEST_CASE(language_integer_identity)
 {
 	module_definition m;
+
 	m.exports.emplace_back(module_definition::exported(
 	    identifier("identity"), expression(lambda(Si::make_unique<expression>(literal(make_unit())),
 	                                              Si::make_unique<expression>(literal(value(type(integer_type())))),
 	                                              Si::make_unique<expression>(return_from_function(
 	                                                  Si::make_unique<expression>(argument())))))));
-
-	m.exports.emplace_back(module_definition::exported(
-	    identifier("generic identity"),
-	    expression(
-	        lambda(Si::make_unique<expression>(literal(make_unit())),
-	               Si::make_unique<expression>(literal(value(type(type_type())))),
-	               Si::make_unique<expression>(lambda(
-	                   Si::make_unique<expression>(literal(make_unit())), Si::make_unique<expression>(argument()),
-	                   Si::make_unique<expression>(return_from_function(Si::make_unique<expression>(argument())))))))));
 
 	m.exports.emplace_back(module_definition::exported(
 	    identifier("call identity"),
@@ -1013,16 +1042,35 @@ BOOST_AUTO_TEST_CASE(language_trivial)
 	               Si::make_unique<expression>(call(Si::make_unique<expression>(local_symbol(identifier("identity"))),
 	                                                Si::make_unique<expression>(literal(value(integer(456))))))))));
 
-	if (false) // TODO
-	{
-		m.exports.emplace_back(module_definition::exported(
-		    identifier("call generic identity"),
-		    expression(lambda(Si::make_unique<expression>(literal(make_unit())),
-		                      Si::make_unique<expression>(literal(value(make_unit_type()))),
-		                      Si::make_unique<expression>(
-		                          call(Si::make_unique<expression>(local_symbol(identifier("generic identity"))),
-		                               Si::make_unique<expression>(literal(value(integer(456))))))))));
-	}
+	local_symbol_table symbols(m.exports);
+
+	auto writer = Si::Sink<char, Si::success>::erase(Si::ostream_ref_sink(std::cout));
+	pretty_print(writer, m, symbols);
+}
+
+BOOST_AUTO_TEST_CASE(language_generic_identity)
+{
+	return;
+	// TODO
+
+	module_definition m;
+
+	m.exports.emplace_back(module_definition::exported(
+	    identifier("generic identity"),
+	    expression(
+	        lambda(Si::make_unique<expression>(literal(make_unit())),
+	               Si::make_unique<expression>(literal(value(type(type_type())))),
+	               Si::make_unique<expression>(lambda(
+	                   Si::make_unique<expression>(argument()), Si::make_unique<expression>(bound_value()),
+	                   Si::make_unique<expression>(return_from_function(Si::make_unique<expression>(argument())))))))));
+
+	m.exports.emplace_back(module_definition::exported(
+	    identifier("call generic identity"),
+	    expression(lambda(
+	        Si::make_unique<expression>(literal(make_unit())),
+	        Si::make_unique<expression>(literal(value(make_unit_type()))),
+	        Si::make_unique<expression>(call(Si::make_unique<expression>(local_symbol(identifier("generic identity"))),
+	                                         Si::make_unique<expression>(literal(value(integer(456))))))))));
 
 	local_symbol_table symbols(m.exports);
 
